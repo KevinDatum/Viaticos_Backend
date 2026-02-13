@@ -13,5 +13,9 @@ public interface GastoService {
     List<GastoDTO> listarPorEvento(Long idEvento);
 
     void actualizarEstado(Long idGasto, Long idUsuario, String nuevoEstado, String motivo, String comentario);
+
+    void actualizarImagen(Long idGasto, String objectName);
+
+    String obtenerObjectNameImagen(Long idGasto);
     
 }

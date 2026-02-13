@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "Gasto")
@@ -49,7 +50,7 @@ public class Gasto {
     private LocalDate fechaTasaCambio;
 
     @Column(name = "estado_actual", length = 50)
-    private String estadoActual = "PENDIENTE";
+    private String estadoActual = "BORRADOR";
 
     @Column(name = "url_imagen", length = 1000)
     private String urlImagen;
@@ -60,4 +61,14 @@ public class Gasto {
     @Lob // Para el tipo CLOB de Oracle
     @Column(name = "raw_json_ocr")
     private String rawJsonOcr;
+
+    @Lob
+    @Column(name = "texto_ocr_limpio")
+    private String textoOcrLimpio;
+
+    @Column(name = "estado_procesamiento", length = 50)
+    private String estadoProcesamiento; // ej: SUBIDO, PROCESANDO_OCR, LLM_LISTO, ERROR
+
+    @Column(name = "fecha_upload")
+    private LocalDateTime fechaUpload;
 }

@@ -74,4 +74,25 @@ public class GastoServiceImpl implements GastoService {
         historialRepository.save(historial);
     }
 
+    @Transactional
+    @Override
+    public void actualizarImagen(Long idGasto, String objectName) {
+
+        Gasto gasto = gastoRepository.findById(idGasto)
+                .orElseThrow(() -> new RuntimeException("Gasto no encontrado con id: " + idGasto));
+
+        gasto.setUrlImagen(objectName);
+
+        gastoRepository.save(gasto);
+    }
+
+    @Override
+    public String obtenerObjectNameImagen(Long idGasto) {
+
+        Gasto gasto = gastoRepository.findById(idGasto)
+                .orElseThrow(() -> new RuntimeException("Gasto no encontrado con id: " + idGasto));
+
+        return gasto.getUrlImagen(); // aquí debe estar guardado el objectName
+    }
+
 }

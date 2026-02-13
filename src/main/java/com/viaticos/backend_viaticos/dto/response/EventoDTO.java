@@ -11,8 +11,7 @@ public interface EventoDTO {
     LocalDate getFechaFin();
     String getResponsable(); // Nombre + Apellido del empleado
     BigDecimal getTotalGastado(); // Suma de todos los gastos asociados
-    String getEstado(); // ACTIVO / FINALIZADO
-
+    String getEstado();
     Long getIdEmpleado();
 
     BigDecimal getPresupuesto();
