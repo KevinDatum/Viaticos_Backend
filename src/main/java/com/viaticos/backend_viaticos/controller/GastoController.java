@@ -1,11 +1,12 @@
 package com.viaticos.backend_viaticos.controller;
 
+import com.viaticos.backend_viaticos.dto.request.GastoItemOcrRequestDTO;
 import com.viaticos.backend_viaticos.dto.response.GastoDTO;
 import com.viaticos.backend_viaticos.entity.Gasto;
 import com.viaticos.backend_viaticos.entity.GastoItem;
 import com.viaticos.backend_viaticos.repository.GastoItemRepository;
 import com.viaticos.backend_viaticos.service.GastoService;
-//import com.viaticos.backend_viaticos.service.OciObjectStorageService;
+import com.viaticos.backend_viaticos.service.OciObjectStorageService;
 import com.viaticos.backend_viaticos.service.storage.OciStorageService;
 import com.viaticos.backend_viaticos.service.storage.StorageService;
 
@@ -14,6 +15,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,10 +35,10 @@ public class GastoController {
 
     @Autowired
     private OciStorageService ociStorageService;
-/* 
+
     @Autowired
-    private OciObjectStorageService ociService;
-*/
+    private OciObjectStorageService ociObjectStorageService;
+
     @GetMapping
     public List<GastoDTO> obtenerTodos() {
         return gastoService.listarTodos();
@@ -52,12 +54,23 @@ public class GastoController {
         return gastoService.guardarGasto(gasto);
     }
 
-    @GetMapping("/{id}/items")
-    public ResponseEntity<List<GastoItem>> obtenerItems(@PathVariable Long id) {
-
+   @GetMapping("/{id}/items")
+    public ResponseEntity<List<GastoItemOcrRequestDTO>> obtenerItems(@PathVariable Long id) {
         List<GastoItem> items = gastoItemRepository.findByGasto_IdGasto(id);
 
-        return ResponseEntity.ok(items);
+        List<GastoItemOcrRequestDTO> itemsDto = items.stream().map(item -> {
+            GastoItemOcrRequestDTO dto = new GastoItemOcrRequestDTO();
+            dto.setDescripcion(item.getDescripcion());
+            dto.setCantidad(item.getCantidad() != null ? item.getCantidad() : BigDecimal.ONE); 
+            dto.setPrecioUnitario(item.getPrecioUnitario()); 
+            
+            // ¡AQUÍ ESTÁ LA CORRECCIÓN FINAL PARA QUE NO FALLE!
+            dto.setPrecioTotal(item.getTotalItem()); 
+            
+            return dto;
+        }).toList();
+
+        return ResponseEntity.ok(itemsDto);
     }
 
     @PutMapping("/{id}/estado")
@@ -147,7 +160,7 @@ public class GastoController {
                     continue;
                 }
 
-                String url = ociStorageService.generateParUrl(objectName, 180); // 3 horas
+                String url = ociObjectStorageService.generateParUrlWebp(objectName, 180); // 3 horas
                 resultado.put(objectName, url);
             }
 

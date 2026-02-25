@@ -14,7 +14,7 @@ public class CacheConfig {
     @Bean
     public CacheManager cacheManager() {
 
-        CaffeineCacheManager cacheManager = new CaffeineCacheManager("parUrls");
+        CaffeineCacheManager cacheManager = new CaffeineCacheManager("parWebpUrls");
 
         cacheManager.setCaffeine(Caffeine.newBuilder()
                 .expireAfterWrite(3, TimeUnit.HOURS) // ⏳ dura 3 horas

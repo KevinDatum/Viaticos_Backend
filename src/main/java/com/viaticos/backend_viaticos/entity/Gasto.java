@@ -66,6 +66,12 @@ public class Gasto {
     @Column(name = "texto_ocr_limpio")
     private String textoOcrLimpio;
 
+    @Column(name = "metodo_pago")
+    private String metodoPago;
+
+    @Column(name = "ultimos4tarjeta")
+    private String ultimos4Tarjeta;
+
     @Column(name = "estado_procesamiento", length = 50)
     private String estadoProcesamiento; // ej: SUBIDO, PROCESANDO_OCR, LLM_LISTO, ERROR
 

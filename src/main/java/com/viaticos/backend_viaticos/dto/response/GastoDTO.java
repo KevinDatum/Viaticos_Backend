@@ -30,6 +30,8 @@ public interface GastoDTO {
     
     String getUserArea(); 
 
+    String getUserRole();
+
     Long getIdEvento();
     
     String getEventName();
@@ -39,8 +41,14 @@ public interface GastoDTO {
 
     String getFechaHoraAuditoria();
 
+
+    String getCategoria();
+    String getMoneda();
+    String getMetodoPago();
+    String getUltimos4Tarjeta();
+    BigDecimal getMontoOriginal();
+
     // Métodos default para compatibilidad con tu diseño de React
     default BigDecimal getMonto() { return getMontoUsd(); }
-    default String getMoneda() { return "USD"; }
     default BigDecimal getTasaCambio() { return java.math.BigDecimal.ONE; }
 }

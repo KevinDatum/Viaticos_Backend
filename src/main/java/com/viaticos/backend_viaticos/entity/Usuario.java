@@ -26,6 +26,9 @@ public class Usuario {
 
     private String estado;
 
+    @Column(name = "debe_cambiar_password", nullable = false)
+    private Integer debeCambiarPassword; // 1 o 0
+
     @ManyToOne
     @JoinColumn(name = "id_rol", nullable = false)
     private Rol rol;

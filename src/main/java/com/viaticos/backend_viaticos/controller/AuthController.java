@@ -51,6 +51,7 @@ public class AuthController {
                 user.getRol().getNombre(),
                 user.getEmpleado().getDepartamento().getNombre(),
                 user.getEmpleado().getCorreo(),
+                user.getDebeCambiarPassword(),
                 token
         );
 

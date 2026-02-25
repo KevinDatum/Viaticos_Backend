@@ -17,7 +17,7 @@ public class OciObjectStorageConfig {
 
     @Bean
     public ObjectStorageClient objectStorageClient() throws IOException {
-        var provider = new ConfigFileAuthenticationDetailsProvider("DEFAULT");
+        var provider = new ConfigFileAuthenticationDetailsProvider("VIATICOS");
         ObjectStorageClient client = ObjectStorageClient.builder().build(provider);
         client.setRegion(Region.fromRegionId(region));
         return client;
