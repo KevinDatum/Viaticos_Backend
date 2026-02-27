@@ -1,10 +1,12 @@
 package com.viaticos.backend_viaticos.controller;
 
 import com.viaticos.backend_viaticos.dto.request.GastoItemOcrRequestDTO;
+import com.viaticos.backend_viaticos.dto.response.FacturaExtractResponse;
 import com.viaticos.backend_viaticos.dto.response.GastoDTO;
 import com.viaticos.backend_viaticos.entity.Gasto;
 import com.viaticos.backend_viaticos.entity.GastoItem;
 import com.viaticos.backend_viaticos.repository.GastoItemRepository;
+import com.viaticos.backend_viaticos.service.FacturaSaveService;
 import com.viaticos.backend_viaticos.service.GastoService;
 import com.viaticos.backend_viaticos.service.OciObjectStorageService;
 import com.viaticos.backend_viaticos.service.storage.OciStorageService;
@@ -19,7 +21,7 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
+    
 @RestController
 @RequestMapping("/gastos")
 public class GastoController {
@@ -38,6 +40,9 @@ public class GastoController {
 
     @Autowired
     private OciObjectStorageService ociObjectStorageService;
+
+    @Autowired
+    private FacturaSaveService facturaSaveService;
 
     @GetMapping
     public List<GastoDTO> obtenerTodos() {
@@ -170,6 +175,27 @@ public class GastoController {
             return ResponseEntity.badRequest().body(Map.of(
                     "error", e.getMessage()
             ));
+        }
+    }
+
+    @PutMapping("/{idGasto}/re-evaluar")
+    public ResponseEntity<?> reEvaluarGasto(
+            @PathVariable Long idGasto,
+            @RequestParam Long idUsuario, // Cambiado a Long para coincidir con tu servicio
+            @RequestBody FacturaExtractResponse payload) {
+        
+        try {
+            // Llamamos al servicio transaccional (Recordemos que el servicio devuelve el ID, no el objeto)
+            Long gastoActualizadoId = facturaSaveService.reEvaluarGastoRechazado(idGasto, idUsuario, payload);
+            
+            return ResponseEntity.ok(Map.of(
+                    "mensaje", "Gasto re-evaluado y actualizado correctamente",
+                    "idGasto", gastoActualizadoId
+            ));
+            
+        } catch (Exception e) {
+            e.printStackTrace(); // Reemplaza al log.error para ver el fallo en la consola
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
     }
 }

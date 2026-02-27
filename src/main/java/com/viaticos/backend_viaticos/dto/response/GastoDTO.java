@@ -41,6 +41,8 @@ public interface GastoDTO {
 
     String getFechaHoraAuditoria();
 
+    String getFechaUpload();
+
 
     String getCategoria();
     String getMoneda();

@@ -21,6 +21,8 @@ import com.viaticos.backend_viaticos.repository.UsuarioRepository;
 
 import lombok.RequiredArgsConstructor;
 
+import org.springframework.transaction.annotation.Transactional;
+
 @Service
 @RequiredArgsConstructor
 public class FacturaSaveService {
@@ -39,6 +41,7 @@ public class FacturaSaveService {
 
     private final ObjectMapper mapper = new ObjectMapper();
 
+    @Transactional(rollbackFor = Exception.class)
     public Long guardarFacturaConfirmada(FacturaExtractResponse factura,
             Long idEvento,
             Long idUsuario,
@@ -47,30 +50,43 @@ public class FacturaSaveService {
         // Parsear fecha
         LocalDate fechaFactura = parseFechaFactura(factura.getGasto().getFecha());
 
-        int anioActual = LocalDate.now().getYear();
-        int anioFactura = fechaFactura.getYear();
-
+        // Valores por defecto
         String estadoFinal = "PENDIENTE";
         String motivoHistorial = "CREADO";
-        String comentarioHistorial = "Gasto guardado como pendiente";
+        String comentarioHistorial = "Gasto guardado sin auditoría IA";
 
-        // Validación ticket de otro año
-        if (anioFactura != anioActual) {
-            estadoFinal = "RECHAZADO";
-            motivoHistorial = "FECHA_FUERA_DE_ANIO";
-            comentarioHistorial = "Ticket pertenece al año " + anioFactura + " y el año actual es " + anioActual;
+        // --- 🤖 CAPTURAR DECISIÓN DE LA IA Y DEL FRONTEND ANTI-FRAUDE ---
+        if (factura.getAuditoria() != null && factura.getAuditoria().getEstado_ia() != null) {
+            estadoFinal = factura.getAuditoria().getEstado_ia().toUpperCase();
+            motivoHistorial = "AUDITORIA_IA";
+            comentarioHistorial = factura.getAuditoria().getMotivo_ia();
+
+            // Si el frontend detectó fraude en el primer guardado
+            if (comentarioHistorial != null && comentarioHistorial.contains("Alerta de Integridad")) {
+                motivoHistorial = "ALERTA_INTEGRIDAD";
+            }
+
+            // ✨ TRADUCCIÓN A TUS 3 ESTADOS OFICIALES
+            if (estadoFinal.equals("REVISION_GERENTE") ||
+                    (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
+                estadoFinal = "PENDIENTE";
+            }
         }
 
-        // Categoría (por ahora hardcodeada para pruebas)
+        // Categoría
         Long idCategoria = mapCategoriaToId(factura.getGasto().getCategoria());
 
-        // defaults
-        BigDecimal tasaCambio = BigDecimal.ONE;
-        BigDecimal montoUsd = factura.getGasto().getMonto();
+        // Extraemos los cálculos internacionales enviados por React
+        BigDecimal tasaCambio = factura.getGasto().getTasaCambio() != null
+                ? BigDecimal.valueOf(factura.getGasto().getTasaCambio())
+                : BigDecimal.ONE;
+
+        BigDecimal montoUsd = factura.getGasto().getMontoUsd() != null
+                ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
+                : factura.getGasto().getMonto();
         Long idTarjeta = null;
 
         // Crear gasto
-
         Gasto gasto = new Gasto();
         gasto.setIdEvento(idEvento);
         gasto.setIdCategoria(idCategoria);
@@ -121,15 +137,10 @@ public class FacturaSaveService {
         GastoHistorial historial = new GastoHistorial();
         historial.setGasto(gasto);
         historial.setUsuario(usuario);
-
         historial.setEstadoAnterior(null);
         historial.setEstadoNuevo(estadoFinal);
-
         historial.setMotivo(motivoHistorial);
         historial.setComentario(comentarioHistorial);
-
-        // NO seteamos fechaHora porque tu entidad dice insertable=false (Oracle lo pone
-        // solo)
 
         gastoHistorialRepository.save(historial);
 
@@ -157,5 +168,118 @@ public class FacturaSaveService {
             case "hospedaje" -> 3L;
             default -> 4L;
         };
+    }
+
+    @Transactional(rollbackFor = Exception.class)
+    public Long reEvaluarGastoRechazado(Long idGasto, Long idUsuario, FacturaExtractResponse factura) throws Exception {
+
+        // 1. Buscar el gasto existente
+        Gasto gasto = gastoRepository.findById(idGasto)
+                .orElseThrow(() -> new RuntimeException("Gasto no encontrado con id: " + idGasto));
+
+        if ("APROBADO".equalsIgnoreCase(gasto.getEstadoActual())) {
+            throw new RuntimeException("No se puede modificar un gasto que ya ha sido aprobado.");
+        }
+
+        String estadoAnterior = gasto.getEstadoActual();
+
+        // 2. Parsear nueva fecha y extraer datos
+        LocalDate fechaFactura = parseFechaFactura(factura.getGasto().getFecha());
+
+        // --- 🛡️ MOTOR ANTI-FRAUDE EN EL BACKEND ---
+        String estadoFinal = "APROBADO";
+        String motivoHistorial = "RE_EVALUADO";
+        String comentarioHistorial = "El usuario corrigió los datos y pasaron la validación.";
+
+        // 1. Verificamos si el usuario alteró campos sensibles
+        BigDecimal montoNuevo = factura.getGasto().getMonto() != null ? factura.getGasto().getMonto() : BigDecimal.ZERO;
+        String comercioNuevo = factura.getGasto().getNombreComercio() != null
+                ? factura.getGasto().getNombreComercio().trim()
+                : "";
+
+        boolean isMontoAlterado = gasto.getMonto() != null && montoNuevo.compareTo(gasto.getMonto()) != 0;
+        boolean isComercioAlterado = gasto.getNombreComercio() != null
+                && !comercioNuevo.equalsIgnoreCase(gasto.getNombreComercio().trim());
+
+        if (isMontoAlterado || isComercioAlterado) {
+            // 🚨 ALERTA: Pierde el derecho a aprobación automática, se va a PENDIENTE para
+            // que el gerente lo vea
+            estadoFinal = "PENDIENTE";
+            motivoHistorial = "ALERTA_INTEGRIDAD";
+            comentarioHistorial = "El empleado alteró el monto original o el comercio extraído por la IA. Requiere validación visual contra el ticket.";
+        } else if (factura.getAuditoria() != null && factura.getAuditoria().getEstado_ia() != null) {
+            estadoFinal = factura.getAuditoria().getEstado_ia().toUpperCase();
+            comentarioHistorial = "Re-evaluado por IA: " + factura.getAuditoria().getMotivo_ia();
+
+            // ✨ TRADUCCIÓN A TUS 3 ESTADOS OFICIALES
+            if (estadoFinal.equals("REVISION_GERENTE") ||
+                    (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
+                estadoFinal = "PENDIENTE";
+            }
+        }
+
+        // 3. Actualizar la Cabecera del Gasto
+        Long idCategoria = mapCategoriaToId(factura.getGasto().getCategoria());
+        gasto.setIdCategoria(idCategoria);
+        gasto.setFecha(fechaFactura);
+        gasto.setMonto(factura.getGasto().getMonto());
+
+        // ✨ Inyectamos la tasa y los dólares recalculados por React
+        if (factura.getGasto().getMontoUsd() != null) {
+            gasto.setMontoUsd(BigDecimal.valueOf(factura.getGasto().getMontoUsd()));
+        } else {
+            gasto.setMontoUsd(factura.getGasto().getMonto());
+        }
+
+        if (factura.getGasto().getTasaCambio() != null) {
+            gasto.setTasaCambio(BigDecimal.valueOf(factura.getGasto().getTasaCambio()));
+        }
+        gasto.setNombreComercio(factura.getGasto().getNombreComercio());
+        gasto.setDescripcion(factura.getGasto().getDescripcion());
+        gasto.setMoneda(factura.getGasto().getMoneda());
+        gasto.setMetodoPago(factura.getGasto().getMetodoPago());
+        gasto.setUltimos4Tarjeta(factura.getGasto().getUltimos4Tarjeta());
+        gasto.setEstadoActual(estadoFinal);
+
+        gasto = gastoRepository.save(gasto);
+
+        // 4. Reemplazar los Items (Productos)
+        gastoItemRepository.deleteByGastoId(idGasto);
+
+        if (factura.getItems() != null) {
+            for (GastoItemOcrRequestDTO itemDTO : factura.getItems()) {
+                GastoItem item = new GastoItem();
+                item.setGasto(gasto);
+                item.setDescripcion(itemDTO.getDescripcion());
+
+                BigDecimal cantidad = itemDTO.getCantidad() != null ? itemDTO.getCantidad() : BigDecimal.ONE;
+                item.setCantidad(cantidad);
+
+                BigDecimal precioUnit = itemDTO.getPrecioUnitario() != null ? itemDTO.getPrecioUnitario()
+                        : BigDecimal.ZERO;
+                BigDecimal precioTot = itemDTO.getPrecioTotal() != null ? itemDTO.getPrecioTotal() : precioUnit;
+
+                item.setPrecioUnitario(precioUnit);
+                item.setTotalItem(precioTot);
+
+                gastoItemRepository.save(item);
+            }
+        }
+
+        // 5. Guardar en el Historial
+        Usuario usuario = usuarioRepository.findById(idUsuario)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado con id: " + idUsuario));
+
+        GastoHistorial historial = new GastoHistorial();
+        historial.setGasto(gasto);
+        historial.setUsuario(usuario);
+        historial.setEstadoAnterior(estadoAnterior);
+        historial.setEstadoNuevo(estadoFinal);
+        historial.setMotivo(motivoHistorial);
+        historial.setComentario(comentarioHistorial);
+
+        gastoHistorialRepository.save(historial);
+
+        return gasto.getIdGasto();
     }
 }

@@ -22,6 +22,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "g.metodo_pago AS \"metodoPago\", " +
                         "g.ultimos4tarjeta AS \"ultimos4Tarjeta\", " +
                         "TO_CHAR(g.fecha, 'YYYY-MM-DD') AS \"fecha\", " +
+                        "TO_CHAR(g.fecha_upload, 'YYYY-MM-DD HH24:MI') AS \"fechaUpload\", " +
                         "g.estado_actual AS \"estadoActual\", " +
                         "g.url_imagen AS \"urlImagen\", " +
                         "CAST(u.id_usuario AS VARCHAR2(50)) AS \"userId\", " +

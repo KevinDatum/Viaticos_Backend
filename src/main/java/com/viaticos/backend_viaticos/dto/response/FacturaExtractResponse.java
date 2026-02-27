@@ -13,6 +13,11 @@ public class FacturaExtractResponse {
     private GastoOcrRequestDTO gasto;
     private List<GastoItemOcrRequestDTO> items;
 
-    private String metodoPago;
-    private String ultimos4Tarjeta;
+    private AuditoriaExtract auditoria; 
+
+    @Data
+    public static class AuditoriaExtract {
+        private String estado_ia;
+        private String motivo_ia;
+    }
 }

@@ -1,14 +1,13 @@
 package com.viaticos.backend_viaticos.entity;
 
-import java.math.BigDecimal;
+import java.time.LocalDateTime;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.JoinColumn;
-import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Lob;
 import jakarta.persistence.Table;
 import lombok.Data;
 
@@ -19,23 +18,22 @@ public class Regla {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "id_regla")
+    @Column(name = "ID_REGLA")
     private Long idRegla;
 
-    @Column(name = "nombre_regla")
-    private String nombreRegla;
-    
-    @Column(name = "monto_maximo")
-    private BigDecimal montoMaximo;
-    
-    @Column(name = "mensaje_error")
-    private String mensajeError;
+    @Column(name = "NOMBRE", nullable = false)
+    private String nombre;
 
-    @ManyToOne
-    @JoinColumn(name = "id_pais")
-    private Pais pais;
+    @Column(name = "VERSION", nullable = false)
+    private String version;
 
-    @ManyToOne
-    @JoinColumn(name = "id_categoria")
-    private CategoriaGasto categoria;
+    @Column(name = "ESTADO_ACTIVO")
+    private Integer estadoActivo; // Usamos Integer porque Oracle maneja el 1 y 0
+
+    @Lob
+    @Column(name = "CONTENIDO_JSON", nullable = false)
+    private String contenidoJson;
+
+    @Column(name = "FECHA_REGISTRO", insertable = false, updatable = false)
+    private LocalDateTime fechaRegistro;
 }

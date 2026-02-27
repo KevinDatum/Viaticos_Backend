@@ -20,7 +20,7 @@ import java.io.InputStream;
 import java.time.OffsetDateTime;
 import java.util.UUID;
 
-import org.springframework.cache.annotation.Cacheable;
+//import org.springframework.cache.annotation.Cacheable;
 
 @Slf4j
 @Service
@@ -88,7 +88,7 @@ public class OciObjectStorageService {
      * Genera URL temporal para que el Frontend muestre la imagen WebP.
      * Mantenemos el Cacheable para evitar llamadas excesivas a OCI.
      */
-    @Cacheable(value = "parWebpUrls", key = "#objectName")
+    //@Cacheable(value = "parWebpUrls", key = "#objectName")
     public String generateParUrlWebp(String objectName, int minutesValid) {
         return generateParUrl(bucketWebp, objectName, minutesValid);
     }

@@ -75,6 +75,7 @@ public class Gasto {
     @Column(name = "estado_procesamiento", length = 50)
     private String estadoProcesamiento; // ej: SUBIDO, PROCESANDO_OCR, LLM_LISTO, ERROR
 
-    @Column(name = "fecha_upload")
+    @Column(name = "FECHA_UPLOAD")
+    @org.hibernate.annotations.CreationTimestamp
     private LocalDateTime fechaUpload;
 }
