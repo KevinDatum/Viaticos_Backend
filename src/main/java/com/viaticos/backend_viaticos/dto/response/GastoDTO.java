@@ -50,7 +50,17 @@ public interface GastoDTO {
     String getUltimos4Tarjeta();
     BigDecimal getMontoOriginal();
 
+
+    String getFechaInicioEvento(); 
+    String getFechaFinEvento();
+    String getPaisDestino();
+
+    String getMotivoViaje();   // Nuevo
+    String getEmpresaPago();   // Nuevo
+    String getAreaGasto();
+
+    BigDecimal getTasaCambio();
+
     // Métodos default para compatibilidad con tu diseño de React
     default BigDecimal getMonto() { return getMontoUsd(); }
-    default BigDecimal getTasaCambio() { return java.math.BigDecimal.ONE; }
 }

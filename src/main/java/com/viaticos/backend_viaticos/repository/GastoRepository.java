@@ -2,6 +2,8 @@ package com.viaticos.backend_viaticos.repository;
 
 import com.viaticos.backend_viaticos.dto.response.GastoDTO;
 import com.viaticos.backend_viaticos.entity.Gasto;
+
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -18,7 +20,8 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "g.monto_usd AS \"montoUsd\", " +
                         "g.monto AS \"montoOriginal\", " +
                         "g.moneda AS \"moneda\", " +
-                        "cg.nombre AS \"categoria\", " +   // <-- JOIN CON TABLA CATEGORIA
+                        "g.tasa_cambio AS \"tasaCambio\", " +
+                        "cg.nombre AS \"categoria\", " +
                         "g.metodo_pago AS \"metodoPago\", " +
                         "g.ultimos4tarjeta AS \"ultimos4Tarjeta\", " +
                         "TO_CHAR(g.fecha, 'YYYY-MM-DD') AS \"fecha\", " +
@@ -31,18 +34,33 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "r.nombre AS \"userRole\", " +
                         "ev.id_evento AS \"idEvento\", " +
                         "ev.nombre AS \"eventName\", " +
+                        "ev.MOTIVO_VIAJE AS \"motivoViaje\", " + // ✅ NUEVO: Motivo
+                        "emp_pago.NOMBRE AS \"empresaPago\", " + // ✅ NUEVO: Nombre Empresa
+                        "cc.NOMBRE AS \"areaGasto\", " + // ✅ NUEVO: Centro de Costo
+                        "TO_CHAR(ev.fecha_inicio, 'YYYY-MM-DD') AS \"fechaInicioEvento\", " +
+                        "TO_CHAR(ev.fecha_fin, 'YYYY-MM-DD') AS \"fechaFinEvento\", " +
+                        "p.nombre AS \"paisDestino\", " +
                         "(SELECT MAX(e_aud.nombre) FROM GASTO_HISTORIAL h " +
                         " JOIN USUARIO u_aud ON h.id_usuario = u_aud.id_usuario " +
                         " JOIN EMPLEADO e_aud ON u_aud.id_empleado = e_aud.id_empleado " +
                         " WHERE h.id_gasto = g.id_gasto) AS \"auditBy\", " +
                         "(SELECT MAX(h.motivo || ': ' || h.comentario) FROM GASTO_HISTORIAL h " +
                         " WHERE h.id_gasto = g.id_gasto AND h.id_historial = " +
-                        " (SELECT MAX(id_historial) FROM GASTO_HISTORIAL WHERE id_gasto = g.id_gasto)) AS \"auditReason\", " +
+                        " (SELECT MAX(id_historial) FROM GASTO_HISTORIAL WHERE id_gasto = g.id_gasto)) AS \"auditReason\", "
+                        +
                         "(SELECT TO_CHAR(MAX(h.fecha_hora), 'DD/MM/YYYY HH24:MI') FROM GASTO_HISTORIAL h " +
                         " WHERE h.id_gasto = g.id_gasto) AS \"fechaHoraAuditoria\" " +
                         "FROM Gasto g " +
-                        "LEFT JOIN Categoria_Gasto cg ON g.id_categoria = cg.id_categoria " + // <-- NUEVO JOIN
+                        "LEFT JOIN Categoria_Gasto cg ON g.id_categoria = cg.id_categoria " +
                         "LEFT JOIN Evento ev ON g.id_evento = ev.id_evento " +
+                        "LEFT JOIN PAIS p ON ev.id_pais = p.id_pais " +
+                        "LEFT JOIN EMPRESA emp_pago ON ev.ID_EMPRESA_PAGO = emp_pago.ID_EMPRESA " + // ✅
+                                                                                                                  // JOIN
+                                                                                                                  // Empresa
+                        "LEFT JOIN CENTRO_COSTO cc ON ev.ID_CENTRO_COSTO = cc.ID_CENTRO_COSTO " + // ✅
+                                                                                                                // JOIN
+                                                                                                                // Centro
+                                                                                                                // Costo
                         "LEFT JOIN Empleado emp ON ev.id_empleado = emp.id_empleado " +
                         "LEFT JOIN Departamento dep ON emp.id_departamento = dep.id_departamento " +
                         "LEFT JOIN Usuario u ON u.id_empleado = emp.id_empleado " +
@@ -56,7 +74,8 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "g.monto_usd AS \"montoUsd\", " +
                         "g.monto AS \"montoOriginal\", " +
                         "g.moneda AS \"moneda\", " +
-                        "cg.nombre AS \"categoria\", " +   // <-- JOIN CON TABLA CATEGORIA
+                        "g.tasa_cambio AS \"tasaCambio\", " +
+                        "cg.nombre AS \"categoria\", " +
                         "g.metodo_pago AS \"metodoPago\", " +
                         "g.ultimos4tarjeta AS \"ultimos4Tarjeta\", " +
                         "TO_CHAR(g.fecha, 'YYYY-MM-DD') AS \"fecha\", " +
@@ -68,22 +87,41 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "r.nombre AS \"userRole\", " +
                         "ev.id_evento AS \"idEvento\", " +
                         "ev.nombre AS \"eventName\", " +
+                        "ev.MOTIVO_VIAJE AS \"motivoViaje\", " + // ✅ NUEVO
+                        "emp_pago.NOMBRE AS \"empresaPago\", " + // ✅ NUEVO
+                        "cc.NOMBRE AS \"areaGasto\", " + // ✅ NUEVO
+                        "TO_CHAR(ev.fecha_inicio, 'YYYY-MM-DD') AS \"fechaInicioEvento\", " +
+                        "TO_CHAR(ev.fecha_fin, 'YYYY-MM-DD') AS \"fechaFinEvento\", " +
+                        "p.nombre AS \"paisDestino\", " +
                         "(SELECT MAX(e_aud.nombre) FROM GASTO_HISTORIAL h " +
                         " JOIN USUARIO u_aud ON h.id_usuario = u_aud.id_usuario " +
                         " JOIN EMPLEADO e_aud ON u_aud.id_empleado = e_aud.id_empleado " +
                         " WHERE h.id_gasto = g.id_gasto) AS \"auditBy\", " +
                         "(SELECT MAX(h.motivo || ': ' || h.comentario) FROM GASTO_HISTORIAL h " +
                         " WHERE h.id_gasto = g.id_gasto AND h.id_historial = " +
-                        " (SELECT MAX(id_historial) FROM GASTO_HISTORIAL WHERE id_gasto = g.id_gasto)) AS \"auditReason\", " +
+                        " (SELECT MAX(id_historial) FROM GASTO_HISTORIAL WHERE id_gasto = g.id_gasto)) AS \"auditReason\", "
+                        +
                         "(SELECT TO_CHAR(MAX(h.fecha_hora), 'DD/MM/YYYY HH24:MI') FROM GASTO_HISTORIAL h " +
                         " WHERE h.id_gasto = g.id_gasto) AS \"fechaHoraAuditoria\" " +
                         "FROM Gasto g " +
-                        "LEFT JOIN Categoria_Gasto cg ON g.id_categoria = cg.id_categoria " + // <-- NUEVO JOIN
+                        "LEFT JOIN Categoria_Gasto cg ON g.id_categoria = cg.id_categoria " +
                         "LEFT JOIN Evento ev ON g.id_evento = ev.id_evento " +
+                        "LEFT JOIN PAIS p ON ev.id_pais = p.id_pais " +
+                        "LEFT JOIN EMPRESA emp_pago ON ev.ID_EMPRESA_PAGO = emp_pago.ID_EMPRESA " + // ✅
+                                                                                                                  // JOIN
+                                                                                                                  // Empresa
+                        "LEFT JOIN CENTRO_COSTO cc ON ev.ID_CENTRO_COSTO = cc.ID_CENTRO_COSTO " + // ✅
+                                                                                                                // JOIN
+                                                                                                                // Centro
+                                                                                                                // Costo
                         "LEFT JOIN Empleado emp ON ev.id_empleado = emp.id_empleado " +
                         "LEFT JOIN Departamento dep ON emp.id_departamento = dep.id_departamento " +
                         "LEFT JOIN Usuario u ON u.id_empleado = emp.id_empleado " +
                         "LEFT JOIN Rol r ON u.id_rol = r.id_rol " +
                         "WHERE ev.id_evento = :idEvento", nativeQuery = true)
         List<GastoDTO> findGastosByEvento(@Param("idEvento") Long idEvento);
+
+        @Query(value = "SELECT NVL(SUM(monto_usd), 0) FROM GASTO " +
+                        "WHERE id_evento = :idEvento AND estado_actual = 'APROBADO'", nativeQuery = true)
+        BigDecimal sumGastosAprobadosByEvento(@Param("idEvento") Long idEvento);
 }

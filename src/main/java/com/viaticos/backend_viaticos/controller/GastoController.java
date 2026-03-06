@@ -9,6 +9,7 @@ import com.viaticos.backend_viaticos.repository.GastoItemRepository;
 import com.viaticos.backend_viaticos.service.FacturaSaveService;
 import com.viaticos.backend_viaticos.service.GastoService;
 import com.viaticos.backend_viaticos.service.OciObjectStorageService;
+import com.viaticos.backend_viaticos.service.SseNotificationService;
 import com.viaticos.backend_viaticos.service.storage.OciStorageService;
 import com.viaticos.backend_viaticos.service.storage.StorageService;
 
@@ -16,12 +17,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-    
+
+
 @RestController
 @RequestMapping("/gastos")
 public class GastoController {
@@ -44,6 +47,16 @@ public class GastoController {
     @Autowired
     private FacturaSaveService facturaSaveService;
 
+    @Autowired
+    private SseNotificationService sseNotificationService;
+
+    // ✨ EL ENDPOINT AL QUE SE CONECTA REACT
+    @GetMapping(value = "/stream", produces = "text/event-stream")
+    public SseEmitter streamGastos() {
+        return sseNotificationService.crearConexion();
+    }
+
+
     @GetMapping
     public List<GastoDTO> obtenerTodos() {
         return gastoService.listarTodos();
@@ -56,22 +69,28 @@ public class GastoController {
 
     @PostMapping
     public Gasto crearGasto(@RequestBody Gasto gasto) {
-        return gastoService.guardarGasto(gasto);
+        // 1. Primero metemos el pan al horno (Guardamos en DB)
+        Gasto nuevoGasto = gastoService.guardarGasto(gasto);
+
+        // 2. Tocamos la campana (Notificamos a React)
+        sseNotificationService.notificarCambioEnGastos();
+
+        return nuevoGasto;
     }
 
-   @GetMapping("/{id}/items")
+    @GetMapping("/{id}/items")
     public ResponseEntity<List<GastoItemOcrRequestDTO>> obtenerItems(@PathVariable Long id) {
         List<GastoItem> items = gastoItemRepository.findByGasto_IdGasto(id);
 
         List<GastoItemOcrRequestDTO> itemsDto = items.stream().map(item -> {
             GastoItemOcrRequestDTO dto = new GastoItemOcrRequestDTO();
             dto.setDescripcion(item.getDescripcion());
-            dto.setCantidad(item.getCantidad() != null ? item.getCantidad() : BigDecimal.ONE); 
-            dto.setPrecioUnitario(item.getPrecioUnitario()); 
-            
+            dto.setCantidad(item.getCantidad() != null ? item.getCantidad() : BigDecimal.ONE);
+            dto.setPrecioUnitario(item.getPrecioUnitario());
+
             // ¡AQUÍ ESTÁ LA CORRECCIÓN FINAL PARA QUE NO FALLE!
-            dto.setPrecioTotal(item.getTotalItem()); 
-            
+            dto.setPrecioTotal(item.getTotalItem());
+
             return dto;
         }).toList();
 
@@ -93,31 +112,34 @@ public class GastoController {
         // Llamamos al servicio con la nueva firma
         gastoService.actualizarEstado(id, idUsuario, nuevoEstado, motivo, comentario);
 
+        sseNotificationService.notificarCambioEnGastos();
+
         return ResponseEntity.ok().build();
     }
-    /* 
-    @GetMapping("/{id}/imagen-url")
-    public ResponseEntity<?> getImagenUrl(@PathVariable Long id) {
-
-        try {
-            String objectName = gastoService.obtenerObjectNameImagen(id);
-
-            if (objectName == null || objectName.isBlank()) {
-                return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Este gasto no tiene imagen asociada"));
-            }
-
-            String url = ociService.generateParUrl(objectName, 180);
-
-            return ResponseEntity.ok(Map.of(
-                    "url", url,
-                    "objectName", objectName));
-
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of(
-                    "error", e.getMessage()));
-        }
-    }*/
+    /*
+     * @GetMapping("/{id}/imagen-url")
+     * public ResponseEntity<?> getImagenUrl(@PathVariable Long id) {
+     * 
+     * try {
+     * String objectName = gastoService.obtenerObjectNameImagen(id);
+     * 
+     * if (objectName == null || objectName.isBlank()) {
+     * return ResponseEntity.badRequest().body(Map.of(
+     * "error", "Este gasto no tiene imagen asociada"));
+     * }
+     * 
+     * String url = ociService.generateParUrl(objectName, 180);
+     * 
+     * return ResponseEntity.ok(Map.of(
+     * "url", url,
+     * "objectName", objectName));
+     * 
+     * } catch (Exception e) {
+     * return ResponseEntity.badRequest().body(Map.of(
+     * "error", e.getMessage()));
+     * }
+     * }
+     */
 
     @PostMapping("/{id}/upload-imagen")
     public ResponseEntity<?> uploadImagen(
@@ -153,8 +175,7 @@ public class GastoController {
         try {
             if (objectNames == null || objectNames.isEmpty()) {
                 return ResponseEntity.badRequest().body(Map.of(
-                        "error", "Lista vacía"
-                ));
+                        "error", "Lista vacía"));
             }
 
             Map<String, String> resultado = new HashMap<>();
@@ -173,8 +194,7 @@ public class GastoController {
 
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of(
-                    "error", e.getMessage()
-            ));
+                    "error", e.getMessage()));
         }
     }
 
@@ -183,16 +203,18 @@ public class GastoController {
             @PathVariable Long idGasto,
             @RequestParam Long idUsuario, // Cambiado a Long para coincidir con tu servicio
             @RequestBody FacturaExtractResponse payload) {
-        
+
         try {
-            // Llamamos al servicio transaccional (Recordemos que el servicio devuelve el ID, no el objeto)
+            // Llamamos al servicio transaccional (Recordemos que el servicio devuelve el
+            // ID, no el objeto)
             Long gastoActualizadoId = facturaSaveService.reEvaluarGastoRechazado(idGasto, idUsuario, payload);
-            
+
+            sseNotificationService.notificarCambioEnGastos();
+
             return ResponseEntity.ok(Map.of(
                     "mensaje", "Gasto re-evaluado y actualizado correctamente",
-                    "idGasto", gastoActualizadoId
-            ));
-            
+                    "idGasto", gastoActualizadoId));
+
         } catch (Exception e) {
             e.printStackTrace(); // Reemplaza al log.error para ver el fallo en la consola
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));

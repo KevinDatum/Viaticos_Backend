@@ -44,4 +44,21 @@ public class Evento {
     @ManyToOne
     @JoinColumn(name = "id_pais")
     private Pais pais;
+
+    @Column(name = "fecha_limite_gastos")
+    private LocalDate fechaLimiteGastos;
+
+    @Column(name = "extensiones_plazo")
+    private Integer extensionesPlazo = 0; // Inicia en 0 por defecto
+
+    @Column(name = "MOTIVO_VIAJE")
+    private String motivoViaje;
+
+    @ManyToOne
+    @JoinColumn(name = "ID_EMPRESA_PAGO")
+    private Empresa empresaPago; 
+
+    @ManyToOne
+    @JoinColumn(name = "ID_CENTRO_COSTO")
+    private CentroCosto areaGasto;
 }

@@ -13,4 +13,8 @@ public class EventoUpdateRequestDTO {
     private BigDecimal presupuesto;
 
     private String motivoCambio;
+
+    private String motivoViaje;
+    private Long idEmpresaPago;
+    private Long idCentroCosto;
 }

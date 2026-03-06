@@ -9,11 +9,13 @@ import org.springframework.stereotype.Service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.viaticos.backend_viaticos.dto.request.GastoItemOcrRequestDTO;
+import com.viaticos.backend_viaticos.dto.response.EventoDTO;
 import com.viaticos.backend_viaticos.dto.response.FacturaExtractResponse;
 import com.viaticos.backend_viaticos.entity.Gasto;
 import com.viaticos.backend_viaticos.entity.GastoHistorial;
 import com.viaticos.backend_viaticos.entity.GastoItem;
 import com.viaticos.backend_viaticos.entity.Usuario;
+import com.viaticos.backend_viaticos.repository.EventoRepository;
 import com.viaticos.backend_viaticos.repository.GastoHistorialRepository;
 import com.viaticos.backend_viaticos.repository.GastoItemRepository;
 import com.viaticos.backend_viaticos.repository.GastoRepository;
@@ -39,6 +41,9 @@ public class FacturaSaveService {
     @Autowired
     private UsuarioRepository usuarioRepository;
 
+    @Autowired
+    private EventoRepository eventoRepository;
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Transactional(rollbackFor = Exception.class)
@@ -61,15 +66,40 @@ public class FacturaSaveService {
             motivoHistorial = "AUDITORIA_IA";
             comentarioHistorial = factura.getAuditoria().getMotivo_ia();
 
-            // Si el frontend detectó fraude en el primer guardado
             if (comentarioHistorial != null && comentarioHistorial.contains("Alerta de Integridad")) {
                 motivoHistorial = "ALERTA_INTEGRIDAD";
             }
 
-            // ✨ TRADUCCIÓN A TUS 3 ESTADOS OFICIALES
             if (estadoFinal.equals("REVISION_GERENTE") ||
                     (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
                 estadoFinal = "PENDIENTE";
+            }
+        }
+
+        // Solo verificamos si la IA intentaba aprobarlo automáticamente
+        if (estadoFinal.equals("APROBADO")) {
+            // Buscamos el presupuesto asignado al evento
+            EventoDTO eventoActual = eventoRepository.findEventoById(idEvento);
+
+            if (eventoActual != null && eventoActual.getPresupuesto() != null
+                    && eventoActual.getPresupuesto().compareTo(BigDecimal.ZERO) > 0) {
+
+                // Sumamos lo que ya está aprobado + el ticket que estamos intentando guardar
+                // ahorita
+                BigDecimal gastadoHastaAhora = gastoRepository.sumGastosAprobadosByEvento(idEvento);
+                BigDecimal montoNuevoDolares = factura.getGasto().getMontoUsd() != null
+                        ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
+                        : factura.getGasto().getMonto();
+
+                BigDecimal proyeccionTotal = gastadoHastaAhora.add(montoNuevoDolares);
+
+                // Si se pasa del límite, la IA pierde su poder de aprobar
+                if (proyeccionTotal.compareTo(eventoActual.getPresupuesto()) > 0) {
+                    estadoFinal = "PENDIENTE";
+                    motivoHistorial = "PRESUPUESTO_EXCEDIDO";
+                    comentarioHistorial = "El gasto es válido, pero sobrepasa el presupuesto límite asignado al evento ($"
+                            + eventoActual.getPresupuesto() + "). Requiere aprobación manual del Gerente.";
+                }
             }
         }
 
@@ -215,6 +245,30 @@ public class FacturaSaveService {
             if (estadoFinal.equals("REVISION_GERENTE") ||
                     (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
                 estadoFinal = "PENDIENTE";
+            }
+        }
+
+
+        // --- 🛡️ ESCUDO: CONTROL DE PRESUPUESTO EXCEDIDO (TAMBIÉN AL EDITAR) ---
+        if (estadoFinal.equals("APROBADO")) {
+            EventoDTO eventoActual = eventoRepository.findEventoById(gasto.getIdEvento());
+
+            if (eventoActual != null && eventoActual.getPresupuesto() != null
+                    && eventoActual.getPresupuesto().compareTo(BigDecimal.ZERO) > 0) {
+
+                BigDecimal gastadoHastaAhora = gastoRepository.sumGastosAprobadosByEvento(gasto.getIdEvento());
+                BigDecimal montoNuevoDolares = factura.getGasto().getMontoUsd() != null
+                        ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
+                        : factura.getGasto().getMonto();
+
+                BigDecimal proyeccionTotal = gastadoHastaAhora.add(montoNuevoDolares);
+
+                if (proyeccionTotal.compareTo(eventoActual.getPresupuesto()) > 0) {
+                    estadoFinal = "PENDIENTE";
+                    motivoHistorial = "PRESUPUESTO_EXCEDIDO";
+                    comentarioHistorial = "El gasto corregido es válido, pero sobrepasa el presupuesto límite asignado al evento ($"
+                            + eventoActual.getPresupuesto() + "). Requiere aprobación manual del Gerente.";
+                }
             }
         }
 

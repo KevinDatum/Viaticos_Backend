@@ -12,6 +12,8 @@ public interface EventoService {
 
     List<EventoDTO> listarEventosConTotales();
 
+    List<EventoDTO> listarEventosPorGerente(Long idGerente);
+
     EventoDTO obtenerEventoPorId(Long idEvento);
 
     void finalizarEvento(Long id, Long idUsuario);
@@ -19,4 +21,7 @@ public interface EventoService {
     void guardarEvento(EventoRequestDTO request, Long idUsuario);
 
     void actualizarEvento(Long id, EventoUpdateRequestDTO request, Long idUsuario);
+
+    void extenderPlazoGastos(Long idEvento, Long idUsuario);
+
 }

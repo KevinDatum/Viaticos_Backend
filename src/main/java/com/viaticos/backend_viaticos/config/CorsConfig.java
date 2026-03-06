@@ -16,7 +16,7 @@ public class CorsConfig {
                 // Esto permite que tu React (puerto 5173) hable con Spring (puerto 8080)
                 registry.addMapping("/**") 
                         .allowedOrigins("http://localhost:5173", "https://qpqm95v9-5173.use2.devtunnels.ms") 
-                        .allowedMethods("GET", "POST", "PUT", "DELETE", "OPTIONS")
+                        .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH" ,"OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
             }

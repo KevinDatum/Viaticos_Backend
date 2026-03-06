@@ -33,13 +33,24 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter{
             FilterChain filterChain) throws ServletException, IOException {
 
         final String authHeader = request.getHeader("Authorization");
+        String jwt = null;
 
-        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+        // ✨ 1. BUSCAMOS EL TOKEN EN EL HEADER (Para peticiones normales como fetch)
+        if (authHeader != null && authHeader.startsWith("Bearer ")) {
+            jwt = authHeader.substring(7);
+        } 
+        // ✨ 2. BUSCAMOS EL TOKEN EN LA URL (Para la conexión en tiempo real de React)
+        else if (request.getParameter("token") != null) {
+            jwt = request.getParameter("token");
+        }
+
+        // 3. Si no hay token en ninguno de los dos lados, dejamos que Spring lo rechace
+        if (jwt == null) {
             filterChain.doFilter(request, response);
             return;
         }
 
-        final String jwt = authHeader.substring(7);
+        // 4. Todo sigue igual, extraemos el usuario y validamos
         final String username = jwtService.extractUsername(jwt);
 
         if (username != null && SecurityContextHolder.getContext().getAuthentication() == null) {
@@ -63,6 +74,4 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter{
 
         filterChain.doFilter(request, response);
     }
-
-    
 }

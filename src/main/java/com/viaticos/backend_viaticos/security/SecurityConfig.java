@@ -83,7 +83,7 @@ public class SecurityConfig {
                 "http://localhost:5173",
                 "https://qpqm95v9-5173.use2.devtunnels.ms"));
 
-        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS"));
+        config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH" ,"OPTIONS"));
         config.setAllowedHeaders(List.of("*"));
         config.setAllowCredentials(true);
 

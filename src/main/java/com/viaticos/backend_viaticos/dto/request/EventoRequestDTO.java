@@ -14,4 +14,8 @@ public class EventoRequestDTO {
     private LocalDate fechaInicio;
     private LocalDate fechaFin;
     private BigDecimal presupuesto;
+
+    private String motivoViaje;
+    private Long idEmpresaPago;
+    private Long idCentroCosto;
 }

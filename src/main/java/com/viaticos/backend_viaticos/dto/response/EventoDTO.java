@@ -15,5 +15,16 @@ public interface EventoDTO {
     Long getIdEmpleado();
 
     BigDecimal getPresupuesto();
+
+    LocalDate getFechaLimiteGastos();
+    Integer getExtensionesPlazo();
+
+    String getPaisNombre();
+
+    String getMotivoViaje();
+    String getEmpresaPago();       // Nombre de la empresa (Ej: "DATUM SV")
+    Long getIdEmpresaPago();       // ID de la empresa (Útil si luego quieres editar el evento)
+    String getCentroCostoNombre(); // Nombre del área de gasto (Ej: "120 FINANZAS")
+    Long getIdCentroCosto();
     
 }

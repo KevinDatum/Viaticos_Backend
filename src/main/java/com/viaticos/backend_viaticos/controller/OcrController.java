@@ -7,6 +7,7 @@ import com.viaticos.backend_viaticos.repository.OcrJobRepository;
 import com.viaticos.backend_viaticos.service.FacturaSaveService;
 import com.viaticos.backend_viaticos.service.OciObjectStorageService;
 import com.viaticos.backend_viaticos.service.OcrJobProcessorService;// Ajusta el paquete
+import com.viaticos.backend_viaticos.service.SseNotificationService;
 import com.viaticos.backend_viaticos.service.storage.StorageService;
 
 import lombok.RequiredArgsConstructor;
@@ -29,13 +30,14 @@ public class OcrController {
     private final OcrJobRepository ocrJobRepository;
     private final StorageService storageService; // Para conversión WebP
     private final FacturaSaveService facturaSaveService;
+    private final SseNotificationService sseNotificationService;
 
     /**
      * Paso 1: Recibe la imagen, la procesa (WebP) y lanza el Job de OCR asíncrono.
      */
     @PostMapping(value = "/upload-temp", consumes = "multipart/form-data")
     public ResponseEntity<?> uploadTemp(
-            @RequestParam("file") MultipartFile file, 
+            @RequestParam("file") MultipartFile file,
             @RequestParam Long idEvento,
             @RequestParam Long idUsuario) {
         try {
@@ -98,8 +100,7 @@ public class OcrController {
                         "jobId", job.getIdJob(),
                         "status", job.getStatus().name(),
                         "resultJson", job.getResultJson() != null ? job.getResultJson() : "",
-                        "errorMessage", job.getErrorMessage() != null ? job.getErrorMessage() : ""
-                )))
+                        "errorMessage", job.getErrorMessage() != null ? job.getErrorMessage() : "")))
                 .orElseGet(() -> ResponseEntity.status(404).body(Map.of("message", "Job no encontrado")));
     }
 
@@ -115,6 +116,8 @@ public class OcrController {
         try {
             Long idGastoCreado = facturaSaveService.guardarFacturaConfirmada(
                     factura, idEvento, idUsuario, objectNameWebp);
+
+            sseNotificationService.notificarCambioEnGastos();
 
             return ResponseEntity.ok(Map.of(
                     "message", "Factura guardada correctamente",

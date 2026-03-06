@@ -20,14 +20,11 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 
-
-
-
 @RestController
 @RequestMapping("/eventos")
 @CrossOrigin(origins = "http://localhost:5173")
 public class EventoController {
-    
+
     @Autowired
     private EventoService eventoService;
 
@@ -41,14 +38,19 @@ public class EventoController {
         return ResponseEntity.ok(eventoService.obtenerEventoPorId(id));
     }
 
+    @GetMapping("/gerente/{idEmpleado}")
+    public ResponseEntity<List<EventoDTO>> listarParaGerente(@PathVariable Long idEmpleado) {
+        return ResponseEntity.ok(eventoService.listarEventosPorGerente(idEmpleado));
+    }
+
     @PutMapping("/{id}/finalizar")
     public ResponseEntity<String> finalizar(@PathVariable Long id, @RequestParam Long idUsuario) {
-        try{
+        try {
 
             eventoService.finalizarEvento(id, idUsuario);
             return ResponseEntity.ok("Evento finalizado con exito");
 
-        }catch (Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.status(500).body("Error al procesar la solicitud: \" + e.getMessage())");
         }
     }
@@ -60,25 +62,41 @@ public class EventoController {
             eventoService.guardarEvento(request, idUsuario);
             return ResponseEntity.ok("Evento creado con exito");
 
-        }catch (Exception e) {
+        } catch (Exception e) {
             return ResponseEntity.status(500).body("Error al crear el evento");
         }
     }
 
     @PatchMapping("/{id}/actualizar")
-public ResponseEntity<String> actualizar(
-        @PathVariable Long id, 
-        @RequestBody EventoUpdateRequestDTO request,
-        @RequestParam Long idUsuario) { // Pasamos el usuario por parámetro para la auditoría
-    try {
-        eventoService.actualizarEvento(id, request, idUsuario);
-        return ResponseEntity.ok("Evento actualizado y auditado correctamente");
-    } catch (RuntimeException e) {
-        return ResponseEntity.status(400).body(e.getMessage());
-    } catch (Exception e) {
-        return ResponseEntity.status(500).body("Error interno del servidor");
+    public ResponseEntity<String> actualizar(
+            @PathVariable Long id,
+            @RequestBody EventoUpdateRequestDTO request,
+            @RequestParam Long idUsuario) { // Pasamos el usuario por parámetro para la auditoría
+        try {
+            eventoService.actualizarEvento(id, request, idUsuario);
+            return ResponseEntity.ok("Evento actualizado y auditado correctamente");
+        } catch (RuntimeException e) {
+            return ResponseEntity.status(400).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error interno del servidor");
+        }
     }
-}
-    
-    
+
+
+    // ENDPOINT: Extender plazo de gastos
+    @PostMapping("/{id}/extender-plazo")
+    public ResponseEntity<String> extenderPlazo(
+            @PathVariable Long id, 
+            @RequestParam Long idUsuario) {
+        try {
+            eventoService.extenderPlazoGastos(id, idUsuario);
+            return ResponseEntity.ok("Plazo de ingreso de gastos extendido correctamente.");
+        } catch (RuntimeException e) {
+            // Mandamos el mensaje de error (ej. "Han pasado más de 15 días...") al Frontend
+            return ResponseEntity.status(400).body(e.getMessage());
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Error interno al extender el plazo.");
+        }
+    }
+
 }

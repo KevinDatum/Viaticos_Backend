@@ -11,12 +11,16 @@ import org.springframework.stereotype.Service;
 import com.viaticos.backend_viaticos.dto.request.EventoRequestDTO;
 import com.viaticos.backend_viaticos.dto.request.EventoUpdateRequestDTO;
 import com.viaticos.backend_viaticos.dto.response.EventoDTO;
+import com.viaticos.backend_viaticos.entity.CentroCosto;
 import com.viaticos.backend_viaticos.entity.Empleado;
+import com.viaticos.backend_viaticos.entity.Empresa;
 import com.viaticos.backend_viaticos.entity.Evento;
 import com.viaticos.backend_viaticos.entity.LogAuditoria;
 import com.viaticos.backend_viaticos.entity.Pais;
 import com.viaticos.backend_viaticos.entity.Usuario;
+import com.viaticos.backend_viaticos.repository.CentroCostoRepository;
 import com.viaticos.backend_viaticos.repository.EmpleadoRepository;
+import com.viaticos.backend_viaticos.repository.EmpresaRepository;
 import com.viaticos.backend_viaticos.repository.EventoRepository;
 import com.viaticos.backend_viaticos.repository.LogAuditoriaRepository;
 import com.viaticos.backend_viaticos.repository.PaisRepository;
@@ -42,6 +46,12 @@ public class EventoServiceImpl implements EventoService {
 
     @Autowired
     private UsuarioRepository usuarioRepository;
+
+    @Autowired
+    private EmpresaRepository empresaRepository;
+
+    @Autowired
+    private CentroCostoRepository centroCostoRepository;
 
     @Override
     public List<EventoDTO> listarEventosConTotales() {
@@ -101,7 +111,6 @@ public class EventoServiceImpl implements EventoService {
         evento.setFecha_inicio(request.getFechaInicio());
         evento.setFecha_fin(request.getFechaFin());
         evento.setPresupuesto(request.getPresupuesto());
-        evento.setEstado("Planificado");
         evento.setFechaRegistro(LocalDateTime.now());
 
         Empleado empleado = empleadoRepository.findById(request.getIdEmpleado())
@@ -112,6 +121,33 @@ public class EventoServiceImpl implements EventoService {
 
         evento.setEmpleado(empleado);
         evento.setPais(pais);
+
+        evento.setMotivoViaje(request.getMotivoViaje());
+
+        if (request.getIdEmpresaPago() != null) {
+            Empresa empresa = empresaRepository.findById(request.getIdEmpresaPago())
+                    .orElseThrow(() -> new RuntimeException("La empresa seleccionada no existe."));
+            evento.setEmpresaPago(empresa);
+        }
+
+        if (request.getIdCentroCosto() != null) {
+            CentroCosto centroCosto = centroCostoRepository.findById(request.getIdCentroCosto())
+                    .orElseThrow(() -> new RuntimeException("El área de gasto seleccionada no existe."));
+            evento.setAreaGasto(centroCosto); 
+        }
+
+        // ✨ ESCUDO DE ESTADO INICIAL
+        LocalDate hoy = LocalDate.now();
+
+        // Si la fecha de inicio es HOY (o antes) y la fecha de fin es HOY (o después),
+        // nace ACTIVO
+        if (!request.getFechaInicio().isAfter(hoy) && !request.getFechaFin().isBefore(hoy)) {
+            evento.setEstado("Activo");
+        } else if (request.getFechaInicio().isAfter(hoy)) {
+            evento.setEstado("Planificado");
+        } else {
+            evento.setEstado("Finalizado"); // Por si crean eventos en el pasado
+        }
 
         Evento eventoGuardado = eventoRepository.save(evento);
 
@@ -218,7 +254,92 @@ public class EventoServiceImpl implements EventoService {
         evento.setFecha_fin(requestUpdate.getFechaFin());
         evento.setPresupuesto(requestUpdate.getPresupuesto());
 
+        if(requestUpdate.getMotivoViaje() != null) evento.setMotivoViaje(requestUpdate.getMotivoViaje());
+        if (requestUpdate.getIdEmpresaPago() != null) {
+            Empresa empresa = empresaRepository.findById(requestUpdate.getIdEmpresaPago())
+                    .orElseThrow(() -> new RuntimeException("La empresa seleccionada no existe."));
+            evento.setEmpresaPago(empresa);
+        }
+        if (requestUpdate.getIdCentroCosto() != null) {
+            CentroCosto centroCosto = centroCostoRepository.findById(requestUpdate.getIdCentroCosto())
+                    .orElseThrow(() -> new RuntimeException("El área de gasto seleccionada no existe."));
+            evento.setAreaGasto(centroCosto); 
+        }
+
         eventoRepository.save(evento);
+    }
+
+    @Override
+    public List<EventoDTO> listarEventosPorGerente(Long idGerente) {
+        return eventoRepository.findAllEventosByGerente(idGerente);
+    }
+
+    @Override
+    @Transactional
+    public void extenderPlazoGastos(Long idEvento, Long idUsuario) {
+        // 1. Buscar el evento y al usuario que autoriza
+        Evento evento = eventoRepository.findById(idEvento)
+            .orElseThrow(() -> new RuntimeException("Evento no encontrado"));
+            
+        Usuario usuarioGerente = usuarioRepository.findById(idUsuario)
+            .orElseThrow(() -> new RuntimeException("Usuario no válido para auditar"));
+
+        LocalDate hoy = LocalDate.now();
+        LocalDate limiteMaximoAbsoluto = evento.getFecha_fin().plusDays(15);
+
+        if (hoy.isAfter(limiteMaximoAbsoluto)) {
+            throw new RuntimeException("No se puede extender. Han pasado más de 15 días desde la fecha de fin del evento.");
+        }
+
+        if (evento.getFechaLimiteGastos() == null) {
+            evento.setFechaLimiteGastos(evento.getFecha_fin());
+        }
+        if (evento.getExtensionesPlazo() == null) {
+            evento.setExtensionesPlazo(0);
+        }
+
+        // ✨ AUDITORÍA: Guardamos la foto de cómo estaba antes de modificarlo
+        String fechaAnteriorAudit = evento.getFechaLimiteGastos().toString();
+
+        int diasAExtender = (evento.getExtensionesPlazo() == 0) ? 3 : 2;
+        LocalDate nuevaFechaLimite = evento.getFechaLimiteGastos().plusDays(diasAExtender);
+
+        if (nuevaFechaLimite.isAfter(limiteMaximoAbsoluto)) {
+            nuevaFechaLimite = limiteMaximoAbsoluto; 
+            if (evento.getFechaLimiteGastos().isEqual(limiteMaximoAbsoluto)) {
+                throw new RuntimeException("El evento ya alcanzó el límite máximo de extensión de gastos (15 días).");
+            }
+        }
+
+        // Aplicamos los cambios
+        evento.setFechaLimiteGastos(nuevaFechaLimite);
+        evento.setExtensionesPlazo(evento.getExtensionesPlazo() + 1);
+
+        eventoRepository.save(evento);
+        
+        // ==============================
+        // 🛡️ REGISTRO DE AUDITORÍA
+        // ==============================
+        LogAuditoria log = new LogAuditoria();
+        log.setAccion("EXTENDER_PLAZO");
+        log.setTablaAfectada("EVENTO");
+        log.setIdRegistroAfectado(evento.getIdEvento());
+        log.setCampoAfectado("FECHA_LIMITE_GASTOS");
+        
+        // Registramos el cambio exacto de fechas
+        log.setValorAnterior(fechaAnteriorAudit);
+        log.setValorNuevo(nuevaFechaLimite.toString());
+        
+        log.setJustificacion("Extensión de plazo autorizada por Gerencia");
+        log.setDescripcion(
+                "El gerente extendió el plazo de ingreso de tickets para el evento '" + evento.getNombre() +
+                "'. Días agregados: " + diasAExtender +
+                ". Número de extensión: " + evento.getExtensionesPlazo() +
+                ". Nuevo límite: " + nuevaFechaLimite);
+
+        log.setUsuario(usuarioGerente); 
+        
+        logAuditoriaRepository.save(log);
     }
 
 }
