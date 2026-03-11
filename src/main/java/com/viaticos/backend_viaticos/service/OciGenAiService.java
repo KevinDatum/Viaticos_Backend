@@ -6,7 +6,6 @@ import com.oracle.bmc.generativeaiinference.model.*;
 import com.oracle.bmc.generativeaiinference.requests.ChatRequest;
 import com.oracle.bmc.generativeaiinference.responses.ChatResponse; // Asegúrate de que la ruta sea correcta
 import com.viaticos.backend_viaticos.dto.response.FacturaExtractResponse;
-import com.viaticos.backend_viaticos.dto.response.GastoDTO;
 import com.viaticos.backend_viaticos.entity.Regla;
 import com.viaticos.backend_viaticos.repository.ReglaRepository;
 
@@ -185,34 +184,27 @@ public class OciGenAiService {
 
     log.info("Iniciando generación de mapeo inteligente (Dynamic Schema Injection)...");
 
-    // 1. EXTRAER EL DICCIONARIO DE DATOS DINÁMICAMENTE DESDE TU DTO
-    // Usamos Reflection para leer todos los métodos 'get' de GastoDTO y
-    // convertirlos a nombres de variable.
-    List<String> dynamicKeys = java.util.Arrays.stream(GastoDTO.class.getMethods())
-        .map(java.lang.reflect.Method::getName)
-        .filter(name -> name.startsWith("get"))
-        .map(name -> {
-          String prop = name.substring(3); // Quitar "get"
-          return Character.toLowerCase(prop.charAt(0)) + prop.substring(1); // ej: NombreComercio -> nombreComercio
-        })
-        .collect(java.util.stream.Collectors.toList());
+    // 1. DICCIONARIO CON LOS NUEVOS TOTALES (Cero datos quemados del Excel)
+    List<String> reportVariables = java.util.Arrays.asList(
+        // Datos generales del encabezado
+        "fechaLiquidacion", "titularDelViaje", "fechaSalida", "destinoDelViaje",
+        "fechaRegreso", "motivoDelViaje", "gastosCubiertosPor", "gastosDelArea",
+        "monedaDeLosGastos", "descripcion", 
+        
+        // Datos de liquidación y totales (NUEVOS)
+        "totalMontoLocal", "totalGastos", "viaticosAsignados", "gastosLiquidados", "diferencia", 
+        "firmaSolicitante", "firmaAutorizada",
+        
+        // Datos de la tabla
+        "elementosTabla", "item", "fecha", "factura", "concepto", 
+        "montoLocal", "tasaCambio", "montoUsd"
+    );
 
-    // 2. AGREGAR CAMPOS CALCULADOS/AGRUPADOS QUE SABEMOS QUE EXISTIRÁN EN EL
-    // FRONTEND
-    dynamicKeys.add("elementosTabla"); // La llave maestra que contendrá el array de ítems
-    dynamicKeys.add("totalGastos");
-    dynamicKeys.add("diferencia");
-    dynamicKeys.add("fechaLiquidacion");
-    dynamicKeys.add("firmaSolicitante");
-    dynamicKeys.add("firmaAutorizada");
-
-    // Convertimos la lista a un string legible para el LLM: ["idGasto",
-    // "nombreComercio", "diferencia", ...]
-    String jsonSchemaDisponibles = objectMapper.writeValueAsString(dynamicKeys);
+    String jsonSchemaDisponibles = objectMapper.writeValueAsString(reportVariables);
 
     log.info("Diccionario de datos inyectado al LLM: {}", jsonSchemaDisponibles);
 
-    // 3. EL SYSTEM PROMPT CON INYECCIÓN DE ESQUEMA
+    // 2. EL PROMPT BLINDADO Y GENÉRICO
     String systemPrompt = """
         You are an expert mapping Excel templates to JSON data models.
 
@@ -220,38 +212,42 @@ public class OciGenAiService {
         INPUT 2: Available System Variables: %s
 
         CRITICAL RULES FOR DYNAMIC MAPPING:
-        1. SEMANTIC MATCHING: Look at the labels in the Excel. Find the MOST LOGICAL match from the "Available System Variables" list.
-           Example: If Excel says "Nombre del Colaborador", map it to "userName". If Excel says "Lugar", map it to "paisDestino".
-           DO NOT invent keys. You MUST ONLY use the exact keys provided in INPUT 2.
-
-        2. FOOTERS AND TOTALS: Scan the ENTIRE document, including rows at the very bottom below any tables. Look for semantic patterns like signatures ("Firma"), totals ("Total", "Subtotal"), or dates. Map them to the closest logical System Variable.
-
-        3. CHECKBOX GROUPS: If you detect multiple adjacent options representing a single concept (e.g., [ ] El Salvador, [ ] Guatemala next to a "Destino" label), map it as a "checkbox_group". Record the cell coordinate for EVERY option text.
-
-        4. TABLES: Detect tables if headers appear in the same row. Define the "startRow" as the row IMMEDIATELY AFTER the headers. Map the columns using the Available System Variables (e.g., "descripcion", "montoOriginal", "fecha"). The array path MUST BE "elementosTabla".
+        1. STRICT JSON KEYS: The keys in your JSON MUST be EXACTLY the strings provided in INPUT 2. NEVER use the raw Excel labels as keys.
+        
+        2. INPUT CELLS (CRITICAL): When mapping a standard variable, map it to the empty or underlined cell IMMEDIATELY TO THE RIGHT or BELOW the label. NEVER map it to the cell containing the label text itself.
+        
+        3. CHECKBOX GROUPS (VITAL): If you detect multiple adjacent options for a single concept, map them as a "checkbox_group". 
+           CRITICAL: Variables like "destinoDelViaje", "gastosCubiertosPor", "gastosDelArea", and "monedaDeLosGastos" almost ALWAYS have checkboxes. Ensure they are mapped as checkbox_groups, not simple strings. Record the cell where the option text is located.
+        
+        4. FOOTER & TOTALS: Scan the bottom of the document. You MUST map ALL 5 of these variables: "totalMontoLocal" (the sum under the local amount column), "totalGastos" (the sum under the USD column), "viaticosAsignados", "gastosLiquidados", and "diferencia". Put ALL 5 in the "footer" object.
+        
+        5. TABLES (CRITICAL): You MUST include a "table" object. Set "startRow" to the row IMMEDIATELY AFTER the headers. 
+           CRITICAL FOR COLUMNS: The keys in the "columns" object are the Excel column letters. The VALUES MUST BE THE SYSTEM VARIABLES (e.g., "item", "montoLocal", "montoUsd"), NOT cell coordinates. The arrayPath MUST BE "elementosTabla".
 
         OUTPUT JSON FORMAT:
         {
           "header": {
-             "matchedSystemVariable": "CellCoordinate",
-             "anotherSystemVariable": {
+             "systemVariable1": "CellCoordinate",
+             "systemVariable2": {
                 "type": "checkbox_group",
                 "options": {
-                   "OptionText1": "Cell1",
-                   "OptionText2": "Cell2"
+                   "OptionTextA": "CellCoordinateA"
                 }
              }
           },
           "table": {
-            "startRow": [Row immediately after detected headers],
+            "startRow": [IntegerRowNumber],
             "arrayPath": "elementosTabla",
             "columns": {
-               "A": "matchedPropertyFromItemsArray"
+               "[ColumnLetterA]": "systemVariableForItem", 
+               "[ColumnLetterB]": "systemVariableForLocalAmount"
             }
+          },
+          "footer": {
+             "systemVariableForTotal": "CellCoordinate"
           }
         }
-        """
-        .formatted(jsonSchemaDisponibles);
+        """.formatted(jsonSchemaDisponibles);
 
     String userPrompt = """
         Analyze the following Excel structure JSON and generate the strict template mapping JSON.

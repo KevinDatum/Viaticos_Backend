@@ -59,6 +59,8 @@ public interface GastoDTO {
     String getEmpresaPago();   // Nuevo
     String getAreaGasto();
 
+    BigDecimal getPresupuesto();
+
     BigDecimal getTasaCambio();
 
     // Métodos default para compatibilidad con tu diseño de React

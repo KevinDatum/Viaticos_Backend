@@ -37,6 +37,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "ev.MOTIVO_VIAJE AS \"motivoViaje\", " + // ✅ NUEVO: Motivo
                         "emp_pago.NOMBRE AS \"empresaPago\", " + // ✅ NUEVO: Nombre Empresa
                         "cc.NOMBRE AS \"areaGasto\", " + // ✅ NUEVO: Centro de Costo
+                        "ev.PRESUPUESTO AS \"presupuesto\", " +
                         "TO_CHAR(ev.fecha_inicio, 'YYYY-MM-DD') AS \"fechaInicioEvento\", " +
                         "TO_CHAR(ev.fecha_fin, 'YYYY-MM-DD') AS \"fechaFinEvento\", " +
                         "p.nombre AS \"paisDestino\", " +
@@ -90,6 +91,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "ev.MOTIVO_VIAJE AS \"motivoViaje\", " + // ✅ NUEVO
                         "emp_pago.NOMBRE AS \"empresaPago\", " + // ✅ NUEVO
                         "cc.NOMBRE AS \"areaGasto\", " + // ✅ NUEVO
+                        "ev.PRESUPUESTO AS \"presupuesto\", " +
                         "TO_CHAR(ev.fecha_inicio, 'YYYY-MM-DD') AS \"fechaInicioEvento\", " +
                         "TO_CHAR(ev.fecha_fin, 'YYYY-MM-DD') AS \"fechaFinEvento\", " +
                         "p.nombre AS \"paisDestino\", " +

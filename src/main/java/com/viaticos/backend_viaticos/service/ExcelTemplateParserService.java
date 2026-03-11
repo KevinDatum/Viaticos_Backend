@@ -62,7 +62,7 @@ public class ExcelTemplateParserService {
 
         ArrayNode rootArray = objectMapper.createArrayNode();
 
-        int maxRows = Math.min(sheet.getLastRowNum(), 40);
+        int maxRows = Math.min(sheet.getLastRowNum(), 150);
 
         for (int r = 0; r <= maxRows; r++) {
 
