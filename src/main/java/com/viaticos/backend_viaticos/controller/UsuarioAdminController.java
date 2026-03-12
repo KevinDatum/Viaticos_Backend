@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.viaticos.backend_viaticos.dto.request.CreateUserRequestDTO;
+import com.viaticos.backend_viaticos.dto.request.UpdateUserRequestDTO;
 import com.viaticos.backend_viaticos.service.UsuarioAdminService;
 
 @RestController
@@ -35,5 +36,15 @@ public class UsuarioAdminController {
     @PutMapping("/{idUsuario}/estado")
     public ResponseEntity<?> cambiarEstado(@PathVariable Long idUsuario) {
         return ResponseEntity.ok(usuarioAdminService.cambiarEstado(idUsuario));
+    }
+
+    @PutMapping("/{idUsuario}/reset-password")
+    public ResponseEntity<?> resetPassword(@PathVariable Long idUsuario) {
+        return ResponseEntity.ok(usuarioAdminService.resetPassword(idUsuario));
+    }
+
+    @PutMapping("/{idUsuario}")
+    public ResponseEntity<?> actualizarUsuario(@PathVariable Long idUsuario, @RequestBody UpdateUserRequestDTO dto) {
+        return ResponseEntity.ok(usuarioAdminService.actualizarUsuario(idUsuario, dto));
     }
 }
