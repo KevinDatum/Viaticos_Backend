@@ -62,4 +62,40 @@ public class OcrJobProcessorService {
             ocrJobRepository.save(job);
         }
     }
+
+    @Async("ocrExecutor")
+    public void processDteJob(Long jobId, String dteJsonContent) {
+        OcrJob job = ocrJobRepository.findById(jobId)
+                .orElseThrow(() -> new RuntimeException("OCR_JOB no encontrado: " + jobId));
+
+        try {
+            // 1. Actualizar estado a PROCESANDO
+            job.setStatus(OcrJobStatus.PROCESSING);
+            ocrJobRepository.save(job);
+
+            log.info("--- Fase 1 (DTE): Saltando OCR, el documento ya es un JSON estructurado ---");
+
+            log.info("--- Fase 2 (DTE): Refinando y Auditando datos con OCI Generative AI ---");
+            // Llamamos al nuevo método especial para DTEs
+            FacturaExtractResponse facturaFinal = ociGenAiService.parseDteJson(dteJsonContent);
+
+            // 3. Serializar y guardar el resultado final
+            String finalJson = objectMapper.writeValueAsString(facturaFinal);
+            
+            job.setResultJson(finalJson);
+            job.setStatus(OcrJobStatus.COMPLETED);
+            job.setFinishedAt(LocalDateTime.now());
+
+            ocrJobRepository.save(job);
+            log.info("¡Éxito! Job DTE {} completado súper rápido.", jobId);
+
+        } catch (Exception ex) {
+            log.error("Fallo crítico en el Job DTE {}: {}", jobId, ex.getMessage());
+            
+            job.setStatus(OcrJobStatus.FAILED);
+            job.setErrorMessage(ex.getMessage());
+            job.setFinishedAt(LocalDateTime.now());
+            ocrJobRepository.save(job);
+        }
+    }
 }

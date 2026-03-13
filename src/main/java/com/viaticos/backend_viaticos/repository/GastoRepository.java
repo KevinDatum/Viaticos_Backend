@@ -16,6 +16,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
         @Query(value = "SELECT " +
                         "g.id_gasto AS \"idGasto\", " +
                         "g.nombre_comercio AS \"nombreComercio\", " +
+                        "g.numero_factura AS \"numeroFactura\", " +
                         "g.descripcion AS \"descripcion\", " +
                         "g.monto_usd AS \"montoUsd\", " +
                         "g.monto AS \"montoOriginal\", " +
@@ -71,6 +72,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
         @Query(value = "SELECT " +
                         "g.id_gasto AS \"idGasto\", " +
                         "g.nombre_comercio AS \"nombreComercio\", " +
+                        "g.numero_factura AS \"numeroFactura\", " +
                         "g.descripcion AS \"descripcion\", " +
                         "g.monto_usd AS \"montoUsd\", " +
                         "g.monto AS \"montoOriginal\", " +

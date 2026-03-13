@@ -127,4 +127,43 @@ public class OcrController {
             return ResponseEntity.badRequest().body("Error al confirmar factura: " + e.getMessage());
         }
     }
+
+    @PostMapping(value = "/upload-dte")
+    public ResponseEntity<?> uploadDteJson(
+            @RequestBody String dteJsonContent, // Recibe el JSON crudo en el body
+            @RequestParam Long idEvento,
+            @RequestParam Long idUsuario) {
+        try {
+            log.info("Recibiendo Factura Electrónica (DTE) en formato JSON puro.");
+
+            // 1) Al no haber imagen, usaremos un "placeholder" o null para los nombres de objeto
+            // Esto le indicará al frontend que no intente renderizar un WebP
+            String objectNameTemp = "DTE_DIRECT_UPLOAD";
+            String objectNameWebp = "NO_IMAGE_DTE.json"; // Vacío porque no hay imagen
+            String parUrlWebp = ""; // Vacío porque no hay imagen
+
+            // 2) Crear y Guardar el registro del JOB en DB
+            OcrJob job = new OcrJob();
+            job.setIdEvento(idEvento);
+            job.setIdUsuario(idUsuario);
+            job.setObjectNameTemp(objectNameTemp);
+            job.setObjectNameWebp(objectNameWebp);
+            job.setStatus(OcrJobStatus.PENDING);
+
+            job = ocrJobRepository.save(job);
+
+            // 3) Lanzar el proceso asíncrono EXPRESS (Directo al LLM)
+            ocrJobProcessorService.processDteJob(job.getIdJob(), dteJsonContent);
+
+            return ResponseEntity.ok(Map.of(
+                    "message", "DTE recibido. Auditoría iniciada en segundo plano.",
+                    "jobId", job.getIdJob(),
+                    "objectNameWebp", objectNameWebp,
+                    "parUrlWebp", parUrlWebp));
+
+        } catch (Exception e) {
+            log.error("Error en upload-dte: {}", e.getMessage());
+            return ResponseEntity.badRequest().body("Error procesando el DTE: " + e.getMessage());
+        }
+    }
 }

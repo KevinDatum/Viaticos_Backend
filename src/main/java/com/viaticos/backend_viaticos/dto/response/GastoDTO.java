@@ -14,6 +14,8 @@ public interface GastoDTO {
     String getNombreComercio();
     
     String getDescripcion();
+
+    String getNumeroFactura();
     
     BigDecimal getMontoUsd();
     

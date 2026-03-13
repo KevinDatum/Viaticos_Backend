@@ -52,6 +52,8 @@ public class FacturaSaveService {
             Long idUsuario,
             String objectNameWebp) throws Exception {
 
+                System.out.println("VALOR RECIBIDO DE LA IA: " + factura.getGasto().getNumeroFactura());
+
         // Parsear fecha
         LocalDate fechaFactura = parseFechaFactura(factura.getGasto().getFecha());
 
@@ -123,6 +125,7 @@ public class FacturaSaveService {
         gasto.setIdTarjeta(idTarjeta);
 
         gasto.setFecha(fechaFactura);
+        gasto.setNumeroFactura(factura.getGasto().getNumeroFactura());
         gasto.setMonto(factura.getGasto().getMonto());
         gasto.setNombreComercio(factura.getGasto().getNombreComercio());
         gasto.setDescripcion(factura.getGasto().getDescripcion());
@@ -276,6 +279,7 @@ public class FacturaSaveService {
         Long idCategoria = mapCategoriaToId(factura.getGasto().getCategoria());
         gasto.setIdCategoria(idCategoria);
         gasto.setFecha(fechaFactura);
+        gasto.setNumeroFactura(factura.getGasto().getNumeroFactura());
         gasto.setMonto(factura.getGasto().getMonto());
 
         // ✨ Inyectamos la tasa y los dólares recalculados por React

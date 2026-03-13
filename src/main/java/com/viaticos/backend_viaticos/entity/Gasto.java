@@ -28,6 +28,9 @@ public class Gasto {
     @Column(name = "fecha", nullable = false)
     private LocalDate fecha;
 
+    @Column(name = "numero_factura", length = 100)
+    private String numeroFactura;
+
     @Column(name = "monto", nullable = false, precision = 15, scale = 2)
     private BigDecimal monto;
 

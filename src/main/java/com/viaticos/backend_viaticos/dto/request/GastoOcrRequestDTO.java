@@ -8,6 +8,7 @@ import lombok.Data;
 public class GastoOcrRequestDTO {
     
     private String fecha;          // DD/MM/YY
+    private String numeroFactura;
     private String categoria;      // Alimentacion, Transporte, Hospedaje, Otros
     private String moneda;         // USD, CRC, etc
     private BigDecimal monto;      // total final
