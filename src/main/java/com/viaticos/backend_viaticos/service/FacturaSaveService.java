@@ -116,7 +116,8 @@ public class FacturaSaveService {
         BigDecimal montoUsd = factura.getGasto().getMontoUsd() != null
                 ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
                 : factura.getGasto().getMonto();
-        Long idTarjeta = null;
+
+        Long idTarjeta = factura.getGasto().getIdTarjeta();
 
         // Crear gasto
         Gasto gasto = new Gasto();
@@ -297,6 +298,10 @@ public class FacturaSaveService {
         gasto.setMoneda(factura.getGasto().getMoneda());
         gasto.setMetodoPago(factura.getGasto().getMetodoPago());
         gasto.setUltimos4Tarjeta(factura.getGasto().getUltimos4Tarjeta());
+        
+        // ✨ NUEVO: Actualizar también la vinculación de la tarjeta al editar
+        gasto.setIdTarjeta(factura.getGasto().getIdTarjeta()); 
+        
         gasto.setEstadoActual(estadoFinal);
 
         gasto = gastoRepository.save(gasto);

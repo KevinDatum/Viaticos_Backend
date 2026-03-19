@@ -6,9 +6,12 @@ import org.springframework.stereotype.Service;
 import com.viaticos.backend_viaticos.dto.response.AuditoriaDTO;
 import com.viaticos.backend_viaticos.entity.GastoHistorial;
 import com.viaticos.backend_viaticos.entity.LogAuditoria;
+import com.viaticos.backend_viaticos.entity.Usuario;
 import com.viaticos.backend_viaticos.repository.GastoHistorialRepository;
 import com.viaticos.backend_viaticos.repository.LogAuditoriaRepository;
+import com.viaticos.backend_viaticos.repository.UsuarioRepository;
 
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -22,6 +25,36 @@ public class AuditoriaService {
 
     @Autowired
     private GastoHistorialRepository gastoHistorialRepository;
+
+    @Autowired
+    private UsuarioRepository usuarioRepository;
+
+
+    // ==========================================
+    // 1. MÉTODO NUEVO PARA ESCRIBIR LOGS
+    // ==========================================
+    public void registrarLog(Long idUsuario, String accion, String tablaAfectada, Long idRegistroAfectado, String descripcion) {
+        try {
+            LogAuditoria log = new LogAuditoria();
+            
+            // Si hay un usuario (no fue el sistema automático)
+            if (idUsuario != null) {
+                Usuario usuario = usuarioRepository.findById(idUsuario).orElse(null);
+                log.setUsuario(usuario);
+            }
+            
+            log.setAccion(accion); // Ej: "CREACION", "ASIGNACION", "REVOCACION"
+            log.setTablaAfectada(tablaAfectada); // Ej: "TARJETA"
+            log.setIdRegistroAfectado(idRegistroAfectado); // El ID de la tarjeta
+            log.setDescripcion(descripcion); // "Se asignó la tarjeta a X"
+            log.setFechaHora(LocalDateTime.now());
+            
+            logRepository.save(log);
+        } catch (Exception e) {
+            // Un error en el log no debería detener el flujo principal
+            System.err.println("Error al registrar auditoría: " + e.getMessage());
+        }
+    }
 
     public List<AuditoriaDTO> obtenerBitacoraCompleta() {
         List<AuditoriaDTO> bitacora = new ArrayList<>();

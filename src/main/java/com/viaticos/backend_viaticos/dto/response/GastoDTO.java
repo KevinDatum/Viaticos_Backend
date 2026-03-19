@@ -50,6 +50,7 @@ public interface GastoDTO {
     String getMoneda();
     String getMetodoPago();
     String getUltimos4Tarjeta();
+    Long getIdTarjeta();
     BigDecimal getMontoOriginal();
 
 

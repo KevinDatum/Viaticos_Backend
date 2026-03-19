@@ -29,4 +29,20 @@ public interface EmpleadoRepository extends JpaRepository<Empleado, Long> {
                 WHERE e.jefe.idEmpleado = :idGerente
             """)
     List<EmpleadoDTO> obtenerSubordinados(@Param("idGerente") Long idGerente);
+
+    @Query("""
+                SELECT
+                    e.idEmpleado as idEmpleado,
+                    e.nombre as nombre,
+                    e.apellido as apellido,
+                    e.correo as correo,
+                    d.idDepartamento as idDepartamento,
+                    d.nombre as departamento,
+                    c.idCargo as idCargo,
+                    c.nombre as cargo
+                FROM Empleado e
+                JOIN e.departamento d
+                JOIN e.cargo c
+            """)
+    List<EmpleadoDTO> obtenerTodos();
 }

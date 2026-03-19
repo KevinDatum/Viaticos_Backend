@@ -25,6 +25,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "cg.nombre AS \"categoria\", " +
                         "g.metodo_pago AS \"metodoPago\", " +
                         "g.ultimos4tarjeta AS \"ultimos4Tarjeta\", " +
+                        "g.id_tarjeta AS \"idTarjeta\", " +
                         "TO_CHAR(g.fecha, 'YYYY-MM-DD') AS \"fecha\", " +
                         "TO_CHAR(g.fecha_upload, 'YYYY-MM-DD HH24:MI') AS \"fechaUpload\", " +
                         "g.estado_actual AS \"estadoActual\", " +
@@ -81,6 +82,7 @@ public interface GastoRepository extends JpaRepository<Gasto, Long> {
                         "cg.nombre AS \"categoria\", " +
                         "g.metodo_pago AS \"metodoPago\", " +
                         "g.ultimos4tarjeta AS \"ultimos4Tarjeta\", " +
+                        "g.id_tarjeta AS \"idTarjeta\", " +
                         "TO_CHAR(g.fecha, 'YYYY-MM-DD') AS \"fecha\", " +
                         "g.estado_actual AS \"estadoActual\", " +
                         "g.url_imagen AS \"urlImagen\", " +

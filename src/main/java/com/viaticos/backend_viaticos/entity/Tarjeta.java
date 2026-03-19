@@ -24,11 +24,22 @@ public class Tarjeta {
 
     private String banco;
 
-    private String numero_tarjeta;
+    // 🛡️ REGLA DE SEGURIDAD PCI: Solo guardamos 4 dígitos
+    @Column(name = "ultimos_4_digitos", length = 4)
+    private String ultimos4Digitos;
+    
+    // ✨ NUEVO: Para reconocerla fácil (Ej: "Amex SV Operaciones")
+    @Column(name = "alias", length = 100)
+    private String alias;
+
+    // ✨ NUEVO: Para controlar si está ACTIVA, INACTIVA o EXTRAVIADA
+    @Column(name = "estado", length = 20)
+    private String estado;
     
     @Column(name = "fecha_expedicion")
     private LocalDate fechaExpedicion;
 
+    // Al no poner 'optional = false', JPA permite que esto sea NULL (Tarjeta libre en inventario)
     @ManyToOne
     @JoinColumn(name = "id_empleado")
     private Empleado empleado;

@@ -25,6 +25,13 @@ public class EmpleadoController {
     @Autowired
     private JwtService jwtService;
 
+    // ✨ NUEVO ENDPOINT: Para que el Admin vea a todos y les asigne tarjetas
+    @GetMapping
+    public List<EmpleadoDTO> listarTodos() {
+        // Asegúrate de tener este método en tu EmpleadoService
+        return empleadoService.obtenerTodos(); 
+    }
+
     @GetMapping("/subordinados/{idGerente}")
     public List<EmpleadoDTO> obtenerSubordinados(@PathVariable Long idGerente) {
 

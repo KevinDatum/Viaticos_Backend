@@ -18,5 +18,10 @@ public class EmpleadoService {
 
         return empleadoRepository.obtenerSubordinados(idGerente);
     }
+
+    // ✨ Simplemente llamamos a la nueva consulta del repositorio
+    public List<EmpleadoDTO> obtenerTodos() {
+        return empleadoRepository.obtenerTodos();
+    }
     
 }

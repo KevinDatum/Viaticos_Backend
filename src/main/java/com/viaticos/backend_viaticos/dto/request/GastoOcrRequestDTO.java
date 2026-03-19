@@ -18,6 +18,7 @@ public class GastoOcrRequestDTO {
 
     private String metodoPago;
     private String ultimos4Tarjeta;
+    private Long idTarjeta;
 
     private Double montoUsd;
     private Double tasaCambio;
