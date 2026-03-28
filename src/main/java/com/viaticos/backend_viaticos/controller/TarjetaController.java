@@ -48,11 +48,14 @@ public class TarjetaController {
     // Ruta: POST /api/tarjetas?idAdmin=1
     // ==========================================
     @PostMapping
-    public ResponseEntity<TarjetaDTO> crearTarjeta(
-            @RequestBody TarjetaDTO dto, 
-            @RequestParam Long idAdmin) {
-        return ResponseEntity.ok(tarjetaService.crearTarjeta(dto, idAdmin));
-    }
+public ResponseEntity<TarjetaDTO> crearTarjeta(
+        @RequestBody TarjetaDTO dto, 
+        @RequestParam Long idUsuarioAuditor) { // Renombrado para que sea genérico
+    
+    // La lógica del Service se mantiene: si el DTO trae un idEmpleado, 
+    // la tarjeta se guarda vinculada a él automáticamente.
+    return ResponseEntity.ok(tarjetaService.crearTarjeta(dto, idUsuarioAuditor));
+}
 
     // ==========================================
     // 4. PUT: ASIGNAR TARJETA A EMPLEADO

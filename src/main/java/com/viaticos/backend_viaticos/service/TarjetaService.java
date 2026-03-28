@@ -21,7 +21,7 @@ public class TarjetaService {
 
     @Autowired
     private TarjetaRepository tarjetaRepository;
-    
+
     @Autowired
     private EmpleadoRepository empleadoRepository;
 
@@ -30,7 +30,6 @@ public class TarjetaService {
 
     @Autowired
     private AuditoriaService auditoriaService;
-    
 
     private TarjetaDTO mapToDTO(Tarjeta tarjeta) {
         TarjetaDTO dto = new TarjetaDTO();
@@ -64,8 +63,8 @@ public class TarjetaService {
                 .stream().map(this::mapToDTO).collect(Collectors.toList());
     }
 
-    // 1. Crear Tarjeta + AUDITORÍA
-    public TarjetaDTO crearTarjeta(TarjetaDTO dto, Long idAdmin) {
+    // 1. Crear Tarjeta + AUDITORÍA (MODIFICADO PARA ASIGNACIÓN AUTOMÁTICA)
+    public TarjetaDTO crearTarjeta(TarjetaDTO dto, Long idUsuarioAuditor) {
         Tarjeta tarjeta = new Tarjeta();
         tarjeta.setBanco(dto.getBanco());
         tarjeta.setUltimos4Digitos(dto.getUltimos4Digitos());
@@ -77,15 +76,29 @@ public class TarjetaService {
                 .orElseThrow(() -> new RuntimeException("País no encontrado"));
         tarjeta.setPais(pais);
 
+        // ✨ SOLUCIÓN: VINCULACIÓN AUTOMÁTICA AL EMPLEADO
+        if (dto.getIdEmpleado() != null) {
+            Empleado empleado = empleadoRepository.findById(dto.getIdEmpleado())
+                    .orElseThrow(() -> new RuntimeException("Empleado no encontrado con ID: " + dto.getIdEmpleado()));
+            tarjeta.setEmpleado(empleado);
+        }
+
         Tarjeta guardada = tarjetaRepository.save(tarjeta);
 
+        // Ajustamos el mensaje de auditoría dependiendo si se asignó o no
+        String mensajeAuditoria = "Se agregó tarjeta " + dto.getBanco() + " terminada en " + dto.getUltimos4Digitos()
+                + " al inventario.";
+        if (dto.getIdEmpleado() != null) {
+            mensajeAuditoria = "El usuario registró y vinculó la tarjeta " + dto.getBanco() + " terminada en "
+                    + dto.getUltimos4Digitos() + " a su billetera.";
+        }
+
         auditoriaService.registrarLog(
-            idAdmin, 
-            "CREACIÓN", 
-            "TARJETA", 
-            guardada.getIdTarjeta(), 
-            "Se agregó tarjeta " + dto.getBanco() + " terminada en " + dto.getUltimos4Digitos() + " al inventario."
-        );
+                idUsuarioAuditor,
+                "CREACIÓN",
+                "TARJETA",
+                guardada.getIdTarjeta(),
+                mensajeAuditoria);
 
         return mapToDTO(guardada);
     }
@@ -102,12 +115,11 @@ public class TarjetaService {
 
         // 🛡️ REGISTRO DE AUDITORÍA ACTIVO
         auditoriaService.registrarLog(
-            idAdmin, 
-            "ASIGNACIÓN", 
-            "TARJETA", 
-            idTarjeta, 
-            "Se asignó la tarjeta al empleado ID " + idEmpleado
-        );
+                idAdmin,
+                "ASIGNACIÓN",
+                "TARJETA",
+                idTarjeta,
+                "Se asignó la tarjeta al empleado ID " + idEmpleado);
 
         return mapToDTO(actualizada);
     }
@@ -116,19 +128,18 @@ public class TarjetaService {
     public TarjetaDTO revocarTarjeta(Long idTarjeta, Long idAdmin) {
         Tarjeta tarjeta = tarjetaRepository.findById(idTarjeta)
                 .orElseThrow(() -> new RuntimeException("Tarjeta no encontrada"));
-        
+
         Long idEmpleadoAnterior = tarjeta.getEmpleado() != null ? tarjeta.getEmpleado().getIdEmpleado() : null;
-        tarjeta.setEmpleado(null); 
+        tarjeta.setEmpleado(null);
         Tarjeta actualizada = tarjetaRepository.save(tarjeta);
 
         // 🛡️ REGISTRO DE AUDITORÍA ACTIVO
         auditoriaService.registrarLog(
-            idAdmin, 
-            "REVOCACIÓN", 
-            "TARJETA", 
-            idTarjeta, 
-            "Se revocó la tarjeta al empleado ID " + idEmpleadoAnterior + ". Regresada a inventario."
-        );
+                idAdmin,
+                "REVOCACIÓN",
+                "TARJETA",
+                idTarjeta,
+                "Se revocó la tarjeta al empleado ID " + idEmpleadoAnterior + ". Regresada a inventario.");
 
         return mapToDTO(actualizada);
     }
@@ -148,29 +159,29 @@ public class TarjetaService {
         String estadoAnterior = tarjeta.getEstado();
 
         // 3. Cambiamos el estado de la tarjeta
-        // En tu UI tienes 3 colores (Activa, Bloqueada, Reportada). 
+        // En tu UI tienes 3 colores (Activa, Bloqueada, Reportada).
         // Como es el empleado quien levanta la mano, el estado oficial será REPORTADA.
-        tarjeta.setEstado("REPORTADA"); 
-        
+        tarjeta.setEstado("REPORTADA");
+
         Tarjeta actualizada = tarjetaRepository.save(tarjeta);
 
         // 4. 🛡️ REGISTRO DE AUDITORÍA
         // Usamos el mismo formato que ya usas para asignar/revocar
         String detalleAuditoria = String.format(
-            "Incidencia reportada. Estado cambió de %s a REPORTADA. Motivo: %s | Detalles: %s", 
-            estadoAnterior, // ✨ AQUÍ LA ESTAMOS USANDO
-            reporte.getMotivo(), 
-            (reporte.getComentario() != null && !reporte.getComentario().isEmpty() ? reporte.getComentario() : "Ninguno")
-        );
+                "Incidencia reportada. Estado cambió de %s a REPORTADA. Motivo: %s | Detalles: %s",
+                estadoAnterior, // ✨ AQUÍ LA ESTAMOS USANDO
+                reporte.getMotivo(),
+                (reporte.getComentario() != null && !reporte.getComentario().isEmpty() ? reporte.getComentario()
+                        : "Ninguno"));
 
-        // Si idEmpleado también funge como idAdmin (el que hace la acción) en tu AuditoriaService, pásalo así:
+        // Si idEmpleado también funge como idAdmin (el que hace la acción) en tu
+        // AuditoriaService, pásalo así:
         auditoriaService.registrarLog(
-            reporte.getIdEmpleado(), // El ID de quien ejecuta la acción
-            "REPORTE_INCIDENCIA", 
-            "TARJETA", 
-            idTarjeta, 
-            detalleAuditoria
-        );
+                reporte.getIdEmpleado(), // El ID de quien ejecuta la acción
+                "REPORTE_INCIDENCIA",
+                "TARJETA",
+                idTarjeta,
+                detalleAuditoria);
 
         return mapToDTO(actualizada);
     }
@@ -182,31 +193,29 @@ public class TarjetaService {
                 .orElseThrow(() -> new RuntimeException("Tarjeta no encontrada"));
 
         String estadoAnterior = tarjeta.getEstado();
-        
+
         // Actualizamos al estado que decida el admin (BLOQUEADA o ACTIVA)
-        tarjeta.setEstado(nuevoEstado.toUpperCase()); 
-        
-        // Si se bloquea por robo, podríamos desvincularla del empleado, 
-        // pero es mejor mantenerla vinculada para el historial. 
+        tarjeta.setEstado(nuevoEstado.toUpperCase());
+
+        // Si se bloquea por robo, podríamos desvincularla del empleado,
+        // pero es mejor mantenerla vinculada para el historial.
         // Depende de tu regla de negocio, por ahora solo cambiamos el estado.
-        
+
         Tarjeta actualizada = tarjetaRepository.save(tarjeta);
 
         // 🛡️ REGISTRO DE AUDITORÍA
         String detalleAuditoria = String.format(
-            "Incidencia resuelta. Estado cambió de %s a %s. Resolución: %s", 
-            estadoAnterior, 
-            nuevoEstado.toUpperCase(), 
-            (resolucion != null && !resolucion.isEmpty() ? resolucion : "Sin comentarios adicionales")
-        );
+                "Incidencia resuelta. Estado cambió de %s a %s. Resolución: %s",
+                estadoAnterior,
+                nuevoEstado.toUpperCase(),
+                (resolucion != null && !resolucion.isEmpty() ? resolucion : "Sin comentarios adicionales"));
 
         auditoriaService.registrarLog(
-            idAdmin, 
-            "RESOLUCION_INCIDENCIA", 
-            "TARJETA", 
-            idTarjeta, 
-            detalleAuditoria
-        );
+                idAdmin,
+                "RESOLUCION_INCIDENCIA",
+                "TARJETA",
+                idTarjeta,
+                detalleAuditoria);
 
         return mapToDTO(actualizada);
     }

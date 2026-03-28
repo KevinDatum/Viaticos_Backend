@@ -29,6 +29,16 @@ public class GastoServiceImpl implements GastoService {
     private UsuarioRepository usuarioRepository;
 
     @Override
+    public boolean existeDuplicado(String numFactura, java.math.BigDecimal monto, java.time.LocalDate fecha,
+            Long idEmpleado) {
+        if (monto == null || fecha == null || idEmpleado == null)
+            return false;
+        long count = gastoRepository.countDuplicates(numFactura, monto, fecha, idEmpleado);
+        return count > 0;
+    }
+
+    @Override
+    @Transactional
     public Gasto guardarGasto(Gasto gasto) {
 
         return gastoRepository.save(gasto);

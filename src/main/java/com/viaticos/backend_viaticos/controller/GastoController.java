@@ -14,6 +14,7 @@ import com.viaticos.backend_viaticos.service.storage.OciStorageService;
 import com.viaticos.backend_viaticos.service.storage.StorageService;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -23,7 +24,6 @@ import java.math.BigDecimal;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
 
 @RestController
 @RequestMapping("/gastos")
@@ -56,7 +56,6 @@ public class GastoController {
         return sseNotificationService.crearConexion();
     }
 
-
     @GetMapping
     public List<GastoDTO> obtenerTodos() {
         return gastoService.listarTodos();
@@ -68,14 +67,23 @@ public class GastoController {
     }
 
     @PostMapping
-    public Gasto crearGasto(@RequestBody Gasto gasto) {
-        // 1. Primero metemos el pan al horno (Guardamos en DB)
-        Gasto nuevoGasto = gastoService.guardarGasto(gasto);
+    public ResponseEntity<?> crearGasto(@RequestBody Gasto gasto) {
+        try {
+            // El service ahora ya trae la validación interna
+            Gasto nuevoGasto = gastoService.guardarGasto(gasto);
 
-        // 2. Tocamos la campana (Notificamos a React)
-        sseNotificationService.notificarCambioEnGastos();
+            sseNotificationService.notificarCambioEnGastos();
+            return ResponseEntity.ok(nuevoGasto);
 
-        return nuevoGasto;
+        } catch (RuntimeException e) {
+            // ✨ CAPTURAMOS EL BLOQUEO DE DUPLICIDAD
+            // Si el mensaje contiene "Bloqueo", devolvemos 409 Conflict
+            if (e.getMessage().contains("Bloqueo")) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", e.getMessage()));
+            }
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
     }
 
     @GetMapping("/{id}/items")

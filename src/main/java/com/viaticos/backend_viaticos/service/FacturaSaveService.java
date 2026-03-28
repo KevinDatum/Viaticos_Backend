@@ -44,25 +44,45 @@ public class FacturaSaveService {
     @Autowired
     private EventoRepository eventoRepository;
 
+    @Autowired
+    private GastoService gastoService;
+
     private final ObjectMapper mapper = new ObjectMapper();
 
     @Transactional(rollbackFor = Exception.class)
     public Long guardarFacturaConfirmada(FacturaExtractResponse factura,
-            Long idEvento,
-            Long idUsuario,
-            String objectNameWebp) throws Exception {
+                                        Long idEvento,
+                                        Long idUsuario,
+                                        String objectNameWebp) throws Exception {
 
-                System.out.println("VALOR RECIBIDO DE LA IA: " + factura.getGasto().getNumeroFactura());
-
-        // Parsear fecha
         LocalDate fechaFactura = parseFechaFactura(factura.getGasto().getFecha());
+        String numFactura = factura.getGasto().getNumeroFactura();
+        BigDecimal montoOriginal = factura.getGasto().getMonto();
 
-        // Valores por defecto
+        // 1. OBTENEMOS EL EMPLEADO
+        Usuario usuarioInfo = usuarioRepository.findById(idUsuario)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        Long idEmpleado = usuarioInfo.getEmpleado() != null ? usuarioInfo.getEmpleado().getIdEmpleado() : null;
+
+        // Limpiamos strings vacíos para evitar problemas con Oracle
+        if (numFactura != null && numFactura.trim().isEmpty()) {
+            numFactura = null;
+        }
+
+        // ============================================================
+        // 🛡️ BLOQUEO ABSOLUTO: RECHAZO DE DUPLICADOS
+        // ============================================================
+        if (idEmpleado != null && gastoService.existeDuplicado(numFactura, montoOriginal, fechaFactura, idEmpleado)) {
+            // Lanza el error que el GastoController atrapará y mandará al Toast del empleado
+            throw new RuntimeException("¡Bloqueo de Seguridad! Ya registraste un comprobante en esta misma fecha y por el mismo monto exacto ($" + montoOriginal + "). No se permiten gastos duplicados.");
+        }
+
+        // Valores por defecto para el flujo normal
         String estadoFinal = "PENDIENTE";
         String motivoHistorial = "CREADO";
         String comentarioHistorial = "Gasto guardado sin auditoría IA";
 
-        // --- 🤖 CAPTURAR DECISIÓN DE LA IA Y DEL FRONTEND ANTI-FRAUDE ---
+        // 2. CAPTURAR DECISIÓN DE LA IA (Si pasa el filtro de duplicados)
         if (factura.getAuditoria() != null && factura.getAuditoria().getEstado_ia() != null) {
             estadoFinal = factura.getAuditoria().getEstado_ia().toUpperCase();
             motivoHistorial = "AUDITORIA_IA";
@@ -72,22 +92,18 @@ public class FacturaSaveService {
                 motivoHistorial = "ALERTA_INTEGRIDAD";
             }
 
-            if (estadoFinal.equals("REVISION_GERENTE") ||
-                    (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
+            if (estadoFinal.equals("REVISION_GERENTE") || (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
                 estadoFinal = "PENDIENTE";
             }
         }
 
-        // Solo verificamos si la IA intentaba aprobarlo automáticamente
+        // --- VALIDACIÓN DE PRESUPUESTO ---
         if (estadoFinal.equals("APROBADO")) {
-            // Buscamos el presupuesto asignado al evento
             EventoDTO eventoActual = eventoRepository.findEventoById(idEvento);
 
             if (eventoActual != null && eventoActual.getPresupuesto() != null
                     && eventoActual.getPresupuesto().compareTo(BigDecimal.ZERO) > 0) {
 
-                // Sumamos lo que ya está aprobado + el ticket que estamos intentando guardar
-                // ahorita
                 BigDecimal gastadoHastaAhora = gastoRepository.sumGastosAprobadosByEvento(idEvento);
                 BigDecimal montoNuevoDolares = factura.getGasto().getMontoUsd() != null
                         ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
@@ -95,7 +111,6 @@ public class FacturaSaveService {
 
                 BigDecimal proyeccionTotal = gastadoHastaAhora.add(montoNuevoDolares);
 
-                // Si se pasa del límite, la IA pierde su poder de aprobar
                 if (proyeccionTotal.compareTo(eventoActual.getPresupuesto()) > 0) {
                     estadoFinal = "PENDIENTE";
                     motivoHistorial = "PRESUPUESTO_EXCEDIDO";
@@ -105,29 +120,23 @@ public class FacturaSaveService {
             }
         }
 
-        // Categoría
+        // Mapeo de Categoría y Tasas
         Long idCategoria = mapCategoriaToId(factura.getGasto().getCategoria());
-
-        // Extraemos los cálculos internacionales enviados por React
         BigDecimal tasaCambio = factura.getGasto().getTasaCambio() != null
                 ? BigDecimal.valueOf(factura.getGasto().getTasaCambio())
                 : BigDecimal.ONE;
-
         BigDecimal montoUsd = factura.getGasto().getMontoUsd() != null
                 ? BigDecimal.valueOf(factura.getGasto().getMontoUsd())
                 : factura.getGasto().getMonto();
 
-        Long idTarjeta = factura.getGasto().getIdTarjeta();
-
-        // Crear gasto
+        // 2. Crear y Guardar el Gasto Principal
         Gasto gasto = new Gasto();
         gasto.setIdEvento(idEvento);
         gasto.setIdCategoria(idCategoria);
-        gasto.setIdTarjeta(idTarjeta);
-
+        gasto.setIdTarjeta(factura.getGasto().getIdTarjeta());
         gasto.setFecha(fechaFactura);
-        gasto.setNumeroFactura(factura.getGasto().getNumeroFactura());
-        gasto.setMonto(factura.getGasto().getMonto());
+        gasto.setNumeroFactura(numFactura);
+        gasto.setMonto(montoOriginal);
         gasto.setNombreComercio(factura.getGasto().getNombreComercio());
         gasto.setDescripcion(factura.getGasto().getDescripcion());
         gasto.setMoneda(factura.getGasto().getMoneda());
@@ -138,36 +147,29 @@ public class FacturaSaveService {
         gasto.setUrlImagen(objectNameWebp);
         gasto.setEstadoIa("OCR_CONFIRMADO");
         gasto.setRawJsonOcr(mapper.writeValueAsString(factura));
-
         gasto.setMetodoPago(factura.getGasto().getMetodoPago());
         gasto.setUltimos4Tarjeta(factura.getGasto().getUltimos4Tarjeta());
 
         gasto = gastoRepository.save(gasto);
 
-        // Guardar items
+        // 3. Guardar el detalle de ítems
         if (factura.getItems() != null) {
             for (GastoItemOcrRequestDTO itemDTO : factura.getItems()) {
-
                 GastoItem item = new GastoItem();
                 item.setGasto(gasto);
                 item.setDescripcion(itemDTO.getDescripcion());
-
-                // cantidad por defecto 1
                 BigDecimal cantidad = itemDTO.getCantidad() != null ? itemDTO.getCantidad() : BigDecimal.ONE;
                 item.setCantidad(cantidad);
-
                 item.setPrecioUnitario(itemDTO.getPrecioUnitario());
                 item.setTotalItem(itemDTO.getPrecioTotal());
-
                 gastoItemRepository.save(item);
             }
         }
 
-        // Buscar usuario real
+        // 4. Registrar en el Historial de Auditoría
         Usuario usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado con id: " + idUsuario));
 
-        // Historial
         GastoHistorial historial = new GastoHistorial();
         historial.setGasto(gasto);
         historial.setUsuario(usuario);
@@ -175,7 +177,6 @@ public class FacturaSaveService {
         historial.setEstadoNuevo(estadoFinal);
         historial.setMotivo(motivoHistorial);
         historial.setComentario(comentarioHistorial);
-
         gastoHistorialRepository.save(historial);
 
         return gasto.getIdGasto();
@@ -252,7 +253,6 @@ public class FacturaSaveService {
             }
         }
 
-
         // --- 🛡️ ESCUDO: CONTROL DE PRESUPUESTO EXCEDIDO (TAMBIÉN AL EDITAR) ---
         if (estadoFinal.equals("APROBADO")) {
             EventoDTO eventoActual = eventoRepository.findEventoById(gasto.getIdEvento());
@@ -298,10 +298,10 @@ public class FacturaSaveService {
         gasto.setMoneda(factura.getGasto().getMoneda());
         gasto.setMetodoPago(factura.getGasto().getMetodoPago());
         gasto.setUltimos4Tarjeta(factura.getGasto().getUltimos4Tarjeta());
-        
+
         // ✨ NUEVO: Actualizar también la vinculación de la tarjeta al editar
-        gasto.setIdTarjeta(factura.getGasto().getIdTarjeta()); 
-        
+        gasto.setIdTarjeta(factura.getGasto().getIdTarjeta());
+
         gasto.setEstadoActual(estadoFinal);
 
         gasto = gastoRepository.save(gasto);

@@ -12,6 +12,8 @@ import com.viaticos.backend_viaticos.service.storage.StorageService;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -108,25 +110,36 @@ public class OcrController {
      * Paso 3: El usuario confirma los datos y se guardan definitivamente en la DB.
      */
     @PostMapping("/factura/confirmar")
-    public ResponseEntity<?> confirmarYGuardarFactura(
-            @RequestBody FacturaExtractResponse factura,
-            @RequestParam Long idEvento,
-            @RequestParam Long idUsuario,
-            @RequestParam String objectNameWebp) {
-        try {
-            Long idGastoCreado = facturaSaveService.guardarFacturaConfirmada(
-                    factura, idEvento, idUsuario, objectNameWebp);
+public ResponseEntity<?> confirmarYGuardarFactura(
+        @RequestBody FacturaExtractResponse factura,
+        @RequestParam Long idEvento,
+        @RequestParam Long idUsuario,
+        @RequestParam String objectNameWebp) {
+    try {
+        Long idGastoCreado = facturaSaveService.guardarFacturaConfirmada(
+                factura, idEvento, idUsuario, objectNameWebp);
 
-            sseNotificationService.notificarCambioEnGastos();
+        sseNotificationService.notificarCambioEnGastos();
 
-            return ResponseEntity.ok(Map.of(
-                    "message", "Factura guardada correctamente",
-                    "idGasto", idGastoCreado));
+        return ResponseEntity.ok(Map.of(
+                "message", "Factura guardada correctamente",
+                "idGasto", idGastoCreado));
 
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body("Error al confirmar factura: " + e.getMessage());
+    } catch (Exception e) {
+        String mensajeError = e.getMessage();
+        
+        // ✨ VALIDACIÓN DE SEGURIDAD: 
+        // Si el mensaje contiene "Bloqueo", enviamos 409 (Conflicto de duplicidad)
+        if (mensajeError != null && mensajeError.contains("¡Bloqueo")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(Map.of("error", mensajeError));
         }
+
+        // Para cualquier otro error, enviamos 400 pero siempre en formato JSON
+        return ResponseEntity.badRequest()
+                .body(Map.of("error", "Error al confirmar factura: " + mensajeError));
     }
+}
 
     @PostMapping(value = "/upload-dte")
     public ResponseEntity<?> uploadDteJson(

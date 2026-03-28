@@ -8,6 +8,8 @@ public interface GastoService {
 
     Gasto guardarGasto(Gasto gasto);
 
+    boolean existeDuplicado(String numFactura, java.math.BigDecimal monto, java.time.LocalDate fecha, Long idEmpleado);
+
     List<GastoDTO> listarTodos();
 
     List<GastoDTO> listarPorEvento(Long idEvento);

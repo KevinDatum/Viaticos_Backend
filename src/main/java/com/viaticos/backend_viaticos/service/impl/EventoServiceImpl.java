@@ -133,7 +133,7 @@ public class EventoServiceImpl implements EventoService {
         if (request.getIdCentroCosto() != null) {
             CentroCosto centroCosto = centroCostoRepository.findById(request.getIdCentroCosto())
                     .orElseThrow(() -> new RuntimeException("El área de gasto seleccionada no existe."));
-            evento.setAreaGasto(centroCosto); 
+            evento.setAreaGasto(centroCosto);
         }
 
         // ✨ ESCUDO DE ESTADO INICIAL
@@ -183,35 +183,79 @@ public class EventoServiceImpl implements EventoService {
     @Transactional
     public void actualizarEvento(Long id, EventoUpdateRequestDTO requestUpdate, Long idUsuario) {
 
+        // 1. Cargar el evento y el usuario auditor
         Evento evento = eventoRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Evento no encontrado"));
 
         Usuario usuario = usuarioRepository.findById(idUsuario)
                 .orElseThrow(() -> new RuntimeException("Usuario no valido"));
 
-        // Valores anteriores
+        // 2. Capturar valores actuales para comparaciones y auditoría
+        LocalDate fechaInicioAnterior = evento.getFecha_inicio();
         LocalDate fechaFinAnterior = evento.getFecha_fin();
         BigDecimal presupuestoAnterior = evento.getPresupuesto();
 
-        // Validación: fecha fin no puede ser anterior al inicio
-        if (requestUpdate.getFechaFin().isBefore(evento.getFecha_inicio())) {
-            throw new RuntimeException("La fecha de fin no puede ser anterior al inicio.");
-        }
+        // 3. Determinar qué campos han cambiado
+        boolean cambioFechaInicio = requestUpdate.getFechaInicio() != null &&
+                !requestUpdate.getFechaInicio().equals(fechaInicioAnterior);
 
-        boolean cambioFecha = !requestUpdate.getFechaFin().equals(fechaFinAnterior);
+        boolean cambioFechaFin = !requestUpdate.getFechaFin().equals(fechaFinAnterior);
+
         boolean cambioPresupuesto = requestUpdate.getPresupuesto().compareTo(presupuestoAnterior) != 0;
 
-        // Si hay cambios importantes, motivo obligatorio
-        if ((cambioFecha || (cambioPresupuesto && requestUpdate.getPresupuesto().compareTo(presupuestoAnterior) > 0))) {
-            if (requestUpdate.getMotivoCambio() == null || requestUpdate.getMotivoCambio().trim().isEmpty()) {
-                throw new RuntimeException("Debe ingresar un motivo para realizar este cambio.");
+        // --- 🛡️ VALIDACIÓN DE SEGURIDAD: FECHA DE INICIO ---
+        if (cambioFechaInicio) {
+            // Solo se permite si el evento aún no ha iniciado (Estado: PLANIFICADO)
+            if (!"PLANIFICADO".equalsIgnoreCase(evento.getEstado())) {
+                throw new RuntimeException(
+                        "No se puede modificar la fecha de inicio de un viaje que ya está en curso o finalizado.");
+            }
+
+            // Validación lógica básica: Inicio no puede ser después del fin
+            if (requestUpdate.getFechaInicio().isAfter(requestUpdate.getFechaFin())) {
+                throw new RuntimeException("La fecha de inicio no puede ser posterior a la fecha de finalización.");
             }
         }
 
-        // -------------------------------
-        // AUDITORÍA CAMBIO FECHA FIN
-        // -------------------------------
-        if (cambioFecha) {
+        // --- VALIDACIÓN GENERAL: FECHA FIN ---
+        if (requestUpdate.getFechaFin().isBefore(requestUpdate.getFechaInicio())) {
+            throw new RuntimeException("La fecha de fin no puede ser anterior a la fecha de inicio.");
+        }
+
+        // --- VALIDACIÓN DE MOTIVO OBLIGATORIO ---
+        // Si cambia fecha fin, fecha inicio o aumenta el presupuesto, el motivo es
+        // obligatorio
+        boolean requiereMotivo = cambioFechaInicio || cambioFechaFin ||
+                (cambioPresupuesto && requestUpdate.getPresupuesto().compareTo(presupuestoAnterior) > 0);
+
+        if (requiereMotivo) {
+            if (requestUpdate.getMotivoCambio() == null || requestUpdate.getMotivoCambio().trim().isEmpty()) {
+                throw new RuntimeException("Debe ingresar un motivo para realizar estos ajustes en el evento.");
+            }
+        }
+
+        // ---------------------------------------------------------------
+        // 📝 SECCIÓN DE AUDITORÍA (LOGS)
+        // ---------------------------------------------------------------
+
+        // AUDITORÍA: CAMBIO FECHA INICIO
+        if (cambioFechaInicio) {
+            LogAuditoria log = new LogAuditoria();
+            log.setAccion("CAMBIO_FECHA_INICIO");
+            log.setTablaAfectada("EVENTO");
+            log.setIdRegistroAfectado(evento.getIdEvento());
+            log.setCampoAfectado("FECHA_INICIO");
+            log.setValorAnterior(fechaInicioAnterior.toString());
+            log.setValorNuevo(requestUpdate.getFechaInicio().toString());
+            log.setJustificacion(requestUpdate.getMotivoCambio());
+            log.setUsuario(usuario);
+            logAuditoriaRepository.save(log);
+
+            evento.setFecha_inicio(requestUpdate.getFechaInicio());
+        }
+
+        // AUDITORÍA: CAMBIO FECHA FIN
+        if (cambioFechaFin) {
             LogAuditoria log = new LogAuditoria();
             log.setAccion("CAMBIO_FECHA_FIN");
             log.setTablaAfectada("EVENTO");
@@ -221,13 +265,12 @@ public class EventoServiceImpl implements EventoService {
             log.setValorNuevo(requestUpdate.getFechaFin().toString());
             log.setJustificacion(requestUpdate.getMotivoCambio());
             log.setUsuario(usuario);
-
             logAuditoriaRepository.save(log);
+
+            evento.setFecha_fin(requestUpdate.getFechaFin());
         }
 
-        // -------------------------------
-        // AUDITORÍA CAMBIO PRESUPUESTO
-        // -------------------------------
+        // AUDITORÍA: CAMBIO PRESUPUESTO
         if (cambioPresupuesto) {
             LogAuditoria log = new LogAuditoria();
             log.setAccion("CAMBIO_PRESUPUESTO");
@@ -236,36 +279,35 @@ public class EventoServiceImpl implements EventoService {
             log.setCampoAfectado("PRESUPUESTO");
             log.setValorAnterior(presupuestoAnterior.toString());
             log.setValorNuevo(requestUpdate.getPresupuesto().toString());
-
-            // si sube presupuesto: obligatorio (ya validado arriba)
-            // si baja presupuesto: opcional pero si viene, se guarda
-            log.setJustificacion(
-                    requestUpdate.getMotivoCambio() != null ? requestUpdate.getMotivoCambio()
-                            : "Actualización de presupuesto");
-
+            log.setJustificacion(requestUpdate.getMotivoCambio() != null ? requestUpdate.getMotivoCambio()
+                    : "Actualización de presupuesto");
             log.setUsuario(usuario);
-
             logAuditoriaRepository.save(log);
+
+            evento.setPresupuesto(requestUpdate.getPresupuesto());
         }
 
-        // -------------------------------
-        // ACTUALIZAR EVENTO
-        // -------------------------------
-        evento.setFecha_fin(requestUpdate.getFechaFin());
-        evento.setPresupuesto(requestUpdate.getPresupuesto());
+        // ---------------------------------------------------------------
+        // 🔄 ACTUALIZAR RESTO DE CAMPOS DINÁMICOS
+        // ---------------------------------------------------------------
 
-        if(requestUpdate.getMotivoViaje() != null) evento.setMotivoViaje(requestUpdate.getMotivoViaje());
+        if (requestUpdate.getMotivoViaje() != null) {
+            evento.setMotivoViaje(requestUpdate.getMotivoViaje().toUpperCase());
+        }
+
         if (requestUpdate.getIdEmpresaPago() != null) {
             Empresa empresa = empresaRepository.findById(requestUpdate.getIdEmpresaPago())
                     .orElseThrow(() -> new RuntimeException("La empresa seleccionada no existe."));
             evento.setEmpresaPago(empresa);
         }
+
         if (requestUpdate.getIdCentroCosto() != null) {
             CentroCosto centroCosto = centroCostoRepository.findById(requestUpdate.getIdCentroCosto())
                     .orElseThrow(() -> new RuntimeException("El área de gasto seleccionada no existe."));
-            evento.setAreaGasto(centroCosto); 
+            evento.setAreaGasto(centroCosto);
         }
 
+        // Guardar cambios finales
         eventoRepository.save(evento);
     }
 
@@ -279,16 +321,17 @@ public class EventoServiceImpl implements EventoService {
     public void extenderPlazoGastos(Long idEvento, Long idUsuario) {
         // 1. Buscar el evento y al usuario que autoriza
         Evento evento = eventoRepository.findById(idEvento)
-            .orElseThrow(() -> new RuntimeException("Evento no encontrado"));
-            
+                .orElseThrow(() -> new RuntimeException("Evento no encontrado"));
+
         Usuario usuarioGerente = usuarioRepository.findById(idUsuario)
-            .orElseThrow(() -> new RuntimeException("Usuario no válido para auditar"));
+                .orElseThrow(() -> new RuntimeException("Usuario no válido para auditar"));
 
         LocalDate hoy = LocalDate.now();
         LocalDate limiteMaximoAbsoluto = evento.getFecha_fin().plusDays(15);
 
         if (hoy.isAfter(limiteMaximoAbsoluto)) {
-            throw new RuntimeException("No se puede extender. Han pasado más de 15 días desde la fecha de fin del evento.");
+            throw new RuntimeException(
+                    "No se puede extender. Han pasado más de 15 días desde la fecha de fin del evento.");
         }
 
         if (evento.getFechaLimiteGastos() == null) {
@@ -305,7 +348,7 @@ public class EventoServiceImpl implements EventoService {
         LocalDate nuevaFechaLimite = evento.getFechaLimiteGastos().plusDays(diasAExtender);
 
         if (nuevaFechaLimite.isAfter(limiteMaximoAbsoluto)) {
-            nuevaFechaLimite = limiteMaximoAbsoluto; 
+            nuevaFechaLimite = limiteMaximoAbsoluto;
             if (evento.getFechaLimiteGastos().isEqual(limiteMaximoAbsoluto)) {
                 throw new RuntimeException("El evento ya alcanzó el límite máximo de extensión de gastos (15 días).");
             }
@@ -316,7 +359,7 @@ public class EventoServiceImpl implements EventoService {
         evento.setExtensionesPlazo(evento.getExtensionesPlazo() + 1);
 
         eventoRepository.save(evento);
-        
+
         // ==============================
         // 🛡️ REGISTRO DE AUDITORÍA
         // ==============================
@@ -325,20 +368,20 @@ public class EventoServiceImpl implements EventoService {
         log.setTablaAfectada("EVENTO");
         log.setIdRegistroAfectado(evento.getIdEvento());
         log.setCampoAfectado("FECHA_LIMITE_GASTOS");
-        
+
         // Registramos el cambio exacto de fechas
         log.setValorAnterior(fechaAnteriorAudit);
         log.setValorNuevo(nuevaFechaLimite.toString());
-        
+
         log.setJustificacion("Extensión de plazo autorizada por Gerencia");
         log.setDescripcion(
                 "El gerente extendió el plazo de ingreso de tickets para el evento '" + evento.getNombre() +
-                "'. Días agregados: " + diasAExtender +
-                ". Número de extensión: " + evento.getExtensionesPlazo() +
-                ". Nuevo límite: " + nuevaFechaLimite);
+                        "'. Días agregados: " + diasAExtender +
+                        ". Número de extensión: " + evento.getExtensionesPlazo() +
+                        ". Nuevo límite: " + nuevaFechaLimite);
 
-        log.setUsuario(usuarioGerente); 
-        
+        log.setUsuario(usuarioGerente);
+
         logAuditoriaRepository.save(log);
     }
 

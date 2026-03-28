@@ -8,6 +8,8 @@ import lombok.Data;
 @Data
 public class EventoUpdateRequestDTO {
     
+    private LocalDate fechaInicio;
+
     private LocalDate fechaFin;
 
     private BigDecimal presupuesto;
