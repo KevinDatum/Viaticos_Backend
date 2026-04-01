@@ -14,4 +14,6 @@ public interface UsuarioAdminDTO {
 
     String getRol();
     String getEstado();
+
+    Long getIdJefe();
 }

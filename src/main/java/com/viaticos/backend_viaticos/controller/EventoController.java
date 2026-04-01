@@ -1,10 +1,12 @@
 package com.viaticos.backend_viaticos.controller;
 
 import java.util.List;
+import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -43,15 +45,13 @@ public class EventoController {
         return ResponseEntity.ok(eventoService.listarEventosPorGerente(idEmpleado));
     }
 
-    @PutMapping("/{id}/finalizar")
-    public ResponseEntity<String> finalizar(@PathVariable Long id, @RequestParam Long idUsuario) {
+    @PutMapping("/{id}/finalizar/{idUsuario}")
+    public ResponseEntity<String> finalizar(@PathVariable Long id, @PathVariable Long idUsuario) {
         try {
-
             eventoService.finalizarEvento(id, idUsuario);
             return ResponseEntity.ok("Evento finalizado con exito");
-
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Error al procesar la solicitud: \" + e.getMessage())");
+            return ResponseEntity.status(500).body("Error al procesar la solicitud: " + e.getMessage());
         }
     }
 
@@ -82,12 +82,9 @@ public class EventoController {
         }
     }
 
-
     // ENDPOINT: Extender plazo de gastos
-    @PostMapping("/{id}/extender-plazo")
-    public ResponseEntity<String> extenderPlazo(
-            @PathVariable Long id, 
-            @RequestParam Long idUsuario) {
+    @PostMapping("/{id}/extender-plazo/{idUsuario}")
+    public ResponseEntity<String> extenderPlazo(@PathVariable Long id, @PathVariable Long idUsuario) {
         try {
             eventoService.extenderPlazoGastos(id, idUsuario);
             return ResponseEntity.ok("Plazo de ingreso de gastos extendido correctamente.");
@@ -96,6 +93,34 @@ public class EventoController {
             return ResponseEntity.status(400).body(e.getMessage());
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Error interno al extender el plazo.");
+        }
+    }
+
+    // ==========================================
+    // DELETE: ELIMINAR EVENTO FINALIZADO
+    // Ruta: DELETE /eventos/eliminar/{idEvento}/{idAdmin}
+    // ==========================================
+    @DeleteMapping("/eliminar/{idEvento}/{idAdmin}")
+    public ResponseEntity<?> eliminarEvento(
+            @PathVariable Long idEvento,
+            @PathVariable Long idAdmin) {
+
+        System.out.println("🚨 Petición DELETE recibida para Evento: " + idEvento + " por Usuario: " + idAdmin);
+
+        try {
+            eventoService.eliminarEvento(idEvento, idAdmin);
+            // Devolvemos un JSON estructurado para que React lo lea sin problemas
+            return ResponseEntity.ok(Map.of("message", "Evento eliminado exitosamente"));
+
+        } catch (RuntimeException e) {
+            // Atrapamos errores de negocio (ej. "No se puede eliminar porque tiene gastos")
+            System.err.println("❌ RECHAZADO POR NEGOCIO: " + e.getMessage());
+            return ResponseEntity.status(400).body(Map.of("message", e.getMessage()));
+
+        } catch (Exception e) {
+            // Atrapamos errores de SQL o servidor
+            System.err.println("❌ ERROR INTERNO: " + e.getMessage());
+            return ResponseEntity.status(500).body(Map.of("message", "Error interno al intentar eliminar el evento."));
         }
     }
 

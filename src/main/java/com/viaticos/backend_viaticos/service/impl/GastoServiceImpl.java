@@ -29,18 +29,47 @@ public class GastoServiceImpl implements GastoService {
     private UsuarioRepository usuarioRepository;
 
     @Override
-    public boolean existeDuplicado(String numFactura, java.math.BigDecimal monto, java.time.LocalDate fecha,
-            Long idEmpleado) {
-        if (monto == null || fecha == null || idEmpleado == null)
-            return false;
-        long count = gastoRepository.countDuplicates(numFactura, monto, fecha, idEmpleado);
-        return count > 0;
+    public boolean existeDuplicado(String numFactura, java.math.BigDecimal monto, java.time.LocalDate fecha, Long idEmpleado) {
+        
+        // 1. REGLA DE ORO: Si el ticket TIENE un número de factura válido (No es S/N)
+        if (numFactura != null && !numFactura.trim().isEmpty() && !numFactura.equalsIgnoreCase("S/N")) {
+            // Buscamos SOLO por número de factura. ¡El monto y la fecha no importan!
+            // Si el número 020477 ya existe, es fraude garantizado.
+            return gastoRepository.existsByNumeroFactura(numFactura.trim());
+        } 
+        
+        // 2. CASO EXTREMO: El ticket no tiene número (Es S/N). 
+        // Aquí SÍ tenemos que usar la fecha y el empleado para intentar adivinar si es duplicado.
+        else {
+            if (fecha == null || idEmpleado == null || monto == null) return false;
+            long count = gastoRepository.countDuplicates("S/N", monto, fecha, idEmpleado);
+            return count > 0;
+        }
     }
 
     @Override
     @Transactional
     public Gasto guardarGasto(Gasto gasto) {
+        String numFactura = gasto.getNumeroFactura();
 
+        // ✨ REGLA DE NEGOCIO: Validar facturas duplicadas globales
+        if (numFactura != null && !numFactura.trim().isEmpty() && !numFactura.equalsIgnoreCase("S/N")) {
+            
+            if (gasto.getIdGasto() == null) {
+                // RUTA A: Es un gasto TOTALMENTE NUEVO
+                if (gastoRepository.existsByNumeroFactura(numFactura.trim())) {
+                    throw new RuntimeException("Posible Fraude: El número de factura '" + numFactura + "' ya fue ingresado previamente en el sistema.");
+                }
+            } else {
+                // RUTA B: Es una ACTUALIZACIÓN (Re-evaluar gasto)
+                // Ignoramos su propio ID para que no se bloquee a sí mismo
+                if (gastoRepository.existsByNumeroFacturaAndIdGastoNot(numFactura.trim(), gasto.getIdGasto())) {
+                    throw new RuntimeException("Posible Fraude: El número de factura '" + numFactura + "' ya está asociado a otro gasto diferente.");
+                }
+            }
+        }
+
+        // Si pasa el escudo, lo guardamos en Oracle
         return gastoRepository.save(gasto);
     }
 

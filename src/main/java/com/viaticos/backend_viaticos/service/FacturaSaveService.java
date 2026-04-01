@@ -59,31 +59,25 @@ public class FacturaSaveService {
         String numFactura = factura.getGasto().getNumeroFactura();
         BigDecimal montoOriginal = factura.getGasto().getMonto();
 
-        // 1. OBTENEMOS EL EMPLEADO
-        Usuario usuarioInfo = usuarioRepository.findById(idUsuario)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        Long idEmpleado = usuarioInfo.getEmpleado() != null ? usuarioInfo.getEmpleado().getIdEmpleado() : null;
-
         // Limpiamos strings vacíos para evitar problemas con Oracle
         if (numFactura != null && numFactura.trim().isEmpty()) {
             numFactura = null;
         }
 
         // ============================================================
-        // 🛡️ BLOQUEO ABSOLUTO: RECHAZO DE DUPLICADOS
+        // 🛡️ EL BLOQUEO DE DUPLICADOS AHORA ESTÁ DELEGADO A GASTOSERVICE
+        // (No necesitamos verificar el monto ni la fecha aquí)
         // ============================================================
-        if (idEmpleado != null && gastoService.existeDuplicado(numFactura, montoOriginal, fechaFactura, idEmpleado)) {
-            // Lanza el error que el GastoController atrapará y mandará al Toast del empleado
-            throw new RuntimeException("¡Bloqueo de Seguridad! Ya registraste un comprobante en esta misma fecha y por el mismo monto exacto ($" + montoOriginal + "). No se permiten gastos duplicados.");
-        }
 
         // Valores por defecto para el flujo normal
         String estadoFinal = "PENDIENTE";
         String motivoHistorial = "CREADO";
         String comentarioHistorial = "Gasto guardado sin auditoría IA";
 
-        // 2. CAPTURAR DECISIÓN DE LA IA (Si pasa el filtro de duplicados)
+        // 2. CAPTURAR DECISIÓN DE LA IA
         if (factura.getAuditoria() != null && factura.getAuditoria().getEstado_ia() != null) {
+            
+            // ✨ FIX: Leemos el estado exacto que envió el Frontend
             estadoFinal = factura.getAuditoria().getEstado_ia().toUpperCase();
             motivoHistorial = "AUDITORIA_IA";
             comentarioHistorial = factura.getAuditoria().getMotivo_ia();
@@ -92,7 +86,8 @@ public class FacturaSaveService {
                 motivoHistorial = "ALERTA_INTEGRIDAD";
             }
 
-            if (estadoFinal.equals("REVISION_GERENTE") || (!estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO"))) {
+            // ✨ FIX: Solo reiniciamos a PENDIENTE si el estado no es ninguno de nuestros 3 estados válidos
+            if (!estadoFinal.equals("REVISION_GERENTE") && !estadoFinal.equals("APROBADO") && !estadoFinal.equals("RECHAZADO")) {
                 estadoFinal = "PENDIENTE";
             }
         }
@@ -150,7 +145,7 @@ public class FacturaSaveService {
         gasto.setMetodoPago(factura.getGasto().getMetodoPago());
         gasto.setUltimos4Tarjeta(factura.getGasto().getUltimos4Tarjeta());
 
-        gasto = gastoRepository.save(gasto);
+        gasto = gastoService.guardarGasto(gasto);
 
         // 3. Guardar el detalle de ítems
         if (factura.getItems() != null) {
@@ -304,7 +299,7 @@ public class FacturaSaveService {
 
         gasto.setEstadoActual(estadoFinal);
 
-        gasto = gastoRepository.save(gasto);
+        gasto = gastoService.guardarGasto(gasto);
 
         // 4. Reemplazar los Items (Productos)
         gastoItemRepository.deleteByGastoId(idGasto);

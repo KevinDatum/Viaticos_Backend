@@ -25,8 +25,7 @@ public interface EventoRepository extends JpaRepository<Evento, Long> {
 
     // 3. Listar por Gerente
     @Query(value = "SELECT * FROM VW_EVENTOS_DETALLE " +
-            "WHERE id_departamento = (SELECT id_departamento FROM EMPLEADO WHERE id_empleado = :idGerente) " +
-            "AND id_pais_empleado = (SELECT id_pais FROM EMPLEADO WHERE id_empleado = :idGerente) " +
+            "WHERE \"idEmpleado\" IN (SELECT id_empleado FROM EMPLEADO WHERE id_jefe = :idGerente OR id_empleado = :idGerente) " +
             "ORDER BY \"fechaInicio\" DESC", nativeQuery = true)
     List<EventoDTO> findAllEventosByGerente(@Param("idGerente") Long idGerente);
 

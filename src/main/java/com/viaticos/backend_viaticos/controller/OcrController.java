@@ -46,8 +46,16 @@ public class OcrController {
             log.info("Recibiendo archivo para procesar: {}", file.getOriginalFilename());
 
             // 1) Generar nombres de objetos
-            String objectNameTemp = "temp/" + UUID.randomUUID() + "_" + file.getOriginalFilename();
-            String objectNameWebp = storageService.generateObjectName("gastos") + ".webp";
+            String originalFileName = file.getOriginalFilename() != null ? file.getOriginalFilename() : "documento.tmp";
+            boolean isPdf = originalFileName.toLowerCase().endsWith(".pdf") ||
+                    (file.getContentType() != null && file.getContentType().contains("pdf"));
+
+            String objectNameTemp = "temp/" + UUID.randomUUID() + "_" + originalFileName;
+
+            // ✨ FIX: Si es PDF, lo guardamos como .pdf en el bucket final. Si no, lo
+            // convertimos a .webp
+            String extensionFinal = isPdf ? ".pdf" : ".webp";
+            String objectNameFinal = storageService.generateObjectName("gastos") + extensionFinal;
 
             // 2) Subir original al bucket TEMP (Para el OCR de OCI)
             ociObjectStorageService.uploadToTempBucket(
@@ -56,23 +64,34 @@ public class OcrController {
                     file.getContentType(),
                     objectNameTemp);
 
-            // 3) Convertir a WEBP y subir al bucket FINAL (Para visualización)
-            byte[] webpBytes = storageService.convertToWebpBytes(file);
-            ociObjectStorageService.uploadToWebpBucket(
-                    new java.io.ByteArrayInputStream(webpBytes),
-                    webpBytes.length,
-                    "image/webp",
-                    objectNameWebp);
+            // 3) Subir al bucket FINAL (Para visualización)
+            if (isPdf) {
+                // 📄 RUTA PDF: Subimos el PDF directo sin intentar convertirlo a imagen
+                ociObjectStorageService.uploadToWebpBucket(
+                        file.getInputStream(),
+                        file.getSize(),
+                        file.getContentType(),
+                        objectNameFinal);
+            } else {
+                // 🖼️ RUTA IMAGEN: Convertimos a WEBP y subimos
+                byte[] webpBytes = storageService.convertToWebpBytes(file);
+                ociObjectStorageService.uploadToWebpBucket(
+                        new java.io.ByteArrayInputStream(webpBytes),
+                        webpBytes.length,
+                        "image/webp",
+                        objectNameFinal);
+            }
 
-            // 4) Generar PAR WEBP para que el frontend pueda mostrar la imagen
-            String parUrlWebp = ociObjectStorageService.generateParUrlWebp(objectNameWebp, 180);
+            // 4) Generar PAR para que el frontend pueda mostrar el archivo (sea PDF o WEBP)
+            String parUrlFinal = ociObjectStorageService.generateParUrlWebp(objectNameFinal, 180);
 
             // 5) Crear y Guardar el registro del JOB en DB
             OcrJob job = new OcrJob();
             job.setIdEvento(idEvento);
             job.setIdUsuario(idUsuario);
             job.setObjectNameTemp(objectNameTemp);
-            job.setObjectNameWebp(objectNameWebp);
+            // ✨ IMPORTANTE: Usamos el nombre final correcto (sea .pdf o .webp)
+            job.setObjectNameWebp(objectNameFinal);
             job.setStatus(OcrJobStatus.PENDING);
 
             job = ocrJobRepository.save(job);
@@ -81,14 +100,14 @@ public class OcrController {
             ocrJobProcessorService.processJob(job.getIdJob());
 
             return ResponseEntity.ok(Map.of(
-                    "message", "Imagen procesada. OCR iniciado en segundo plano.",
+                    "message", "Archivo procesado. OCR iniciado en segundo plano.",
                     "jobId", job.getIdJob(),
-                    "objectNameWebp", objectNameWebp,
-                    "parUrlWebp", parUrlWebp));
+                    "objectNameWebp", objectNameFinal, // Ahora puede ser .webp o .pdf
+                    "parUrlWebp", parUrlFinal));
 
         } catch (Exception e) {
             log.error("Error en upload-temp: {}", e.getMessage());
-            return ResponseEntity.badRequest().body("Error subiendo imagen: " + e.getMessage());
+            return ResponseEntity.badRequest().body("Error subiendo archivo: " + e.getMessage());
         }
     }
 
@@ -110,36 +129,36 @@ public class OcrController {
      * Paso 3: El usuario confirma los datos y se guardan definitivamente en la DB.
      */
     @PostMapping("/factura/confirmar")
-public ResponseEntity<?> confirmarYGuardarFactura(
-        @RequestBody FacturaExtractResponse factura,
-        @RequestParam Long idEvento,
-        @RequestParam Long idUsuario,
-        @RequestParam String objectNameWebp) {
-    try {
-        Long idGastoCreado = facturaSaveService.guardarFacturaConfirmada(
-                factura, idEvento, idUsuario, objectNameWebp);
+    public ResponseEntity<?> confirmarYGuardarFactura(
+            @RequestBody FacturaExtractResponse factura,
+            @RequestParam Long idEvento,
+            @RequestParam Long idUsuario,
+            @RequestParam String objectNameWebp) {
+        try {
+            Long idGastoCreado = facturaSaveService.guardarFacturaConfirmada(
+                    factura, idEvento, idUsuario, objectNameWebp);
 
-        sseNotificationService.notificarCambioEnGastos();
+            sseNotificationService.notificarCambioEnGastos();
 
-        return ResponseEntity.ok(Map.of(
-                "message", "Factura guardada correctamente",
-                "idGasto", idGastoCreado));
+            return ResponseEntity.ok(Map.of(
+                    "message", "Factura guardada correctamente",
+                    "idGasto", idGastoCreado));
 
-    } catch (Exception e) {
-        String mensajeError = e.getMessage();
-        
-        // ✨ VALIDACIÓN DE SEGURIDAD: 
-        // Si el mensaje contiene "Bloqueo", enviamos 409 (Conflicto de duplicidad)
-        if (mensajeError != null && mensajeError.contains("¡Bloqueo")) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("error", mensajeError));
+        } catch (Exception e) {
+            String mensajeError = e.getMessage();
+
+            // ✨ VALIDACIÓN DE SEGURIDAD:
+            // Si el mensaje contiene "Bloqueo", enviamos 409 (Conflicto de duplicidad)
+            if (mensajeError != null && mensajeError.contains("¡Bloqueo")) {
+                return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of("error", mensajeError));
+            }
+
+            // Para cualquier otro error, enviamos 400 pero siempre en formato JSON
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", "Error al confirmar factura: " + mensajeError));
         }
-
-        // Para cualquier otro error, enviamos 400 pero siempre en formato JSON
-        return ResponseEntity.badRequest()
-                .body(Map.of("error", "Error al confirmar factura: " + mensajeError));
     }
-}
 
     @PostMapping(value = "/upload-dte")
     public ResponseEntity<?> uploadDteJson(
@@ -149,7 +168,8 @@ public ResponseEntity<?> confirmarYGuardarFactura(
         try {
             log.info("Recibiendo Factura Electrónica (DTE) en formato JSON puro.");
 
-            // 1) Al no haber imagen, usaremos un "placeholder" o null para los nombres de objeto
+            // 1) Al no haber imagen, usaremos un "placeholder" o null para los nombres de
+            // objeto
             // Esto le indicará al frontend que no intente renderizar un WebP
             String objectNameTemp = "DTE_DIRECT_UPLOAD";
             String objectNameWebp = "NO_IMAGE_DTE.json"; // Vacío porque no hay imagen

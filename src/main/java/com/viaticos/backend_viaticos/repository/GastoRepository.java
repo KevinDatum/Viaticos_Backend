@@ -13,6 +13,10 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface GastoRepository extends JpaRepository<Gasto, Long> {
 
+        boolean existsByNumeroFactura(String numeroFactura);
+
+        boolean existsByNumeroFacturaAndIdGastoNot(String numeroFactura, Long idGasto);
+
         // 1. Listar todos (Admin)
         @Query(value = "SELECT * FROM VW_GASTOS_DETALLE", nativeQuery = true)
         List<GastoDTO> findAllGastosWithDetails();

@@ -24,4 +24,6 @@ public interface EventoService {
 
     void extenderPlazoGastos(Long idEvento, Long idUsuario);
 
+    void eliminarEvento(Long idEvento, Long idUsuarioAuditor);
+
 }

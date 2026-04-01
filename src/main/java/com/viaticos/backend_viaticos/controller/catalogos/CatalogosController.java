@@ -7,11 +7,14 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.CrossOrigin;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import com.viaticos.backend_viaticos.dto.response.CatalogoDTO;
 import com.viaticos.backend_viaticos.dto.response.JefeDTO;
+import com.viaticos.backend_viaticos.entity.Departamento;
 import com.viaticos.backend_viaticos.repository.CargoRepository;
 import com.viaticos.backend_viaticos.repository.DepartamentoRepository;
 import com.viaticos.backend_viaticos.repository.EmpleadoRepository;
@@ -110,5 +113,12 @@ public class CatalogosController {
                 .collect(Collectors.toList());
 
         return ResponseEntity.ok(data);
+    }
+
+    @PostMapping("/departamentos")
+    public ResponseEntity<CatalogoDTO> crearDepartamento(@RequestBody Departamento departamento) {
+        Departamento nuevo = departamentoRepository.save(departamento);
+        // Lo devolvemos como CatalogoDTO para que React lo lea con el formato { id, nombre }
+        return ResponseEntity.ok(new CatalogoDTO(nuevo.getIdDepartamento(), nuevo.getNombre()));
     }
 }

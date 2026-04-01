@@ -4,7 +4,9 @@ import java.util.List;
 import java.util.Map;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -45,17 +47,16 @@ public class TarjetaController {
 
     // ==========================================
     // 3. POST: CREAR NUEVA TARJETA EN INVENTARIO
-    // Ruta: POST /api/tarjetas?idAdmin=1
+    // Ruta: POST /api/tarjetas?idUsuarioAuditor=1
     // ==========================================
     @PostMapping
-public ResponseEntity<TarjetaDTO> crearTarjeta(
-        @RequestBody TarjetaDTO dto, 
-        @RequestParam Long idUsuarioAuditor) { // Renombrado para que sea genérico
-    
-    // La lógica del Service se mantiene: si el DTO trae un idEmpleado, 
-    // la tarjeta se guarda vinculada a él automáticamente.
-    return ResponseEntity.ok(tarjetaService.crearTarjeta(dto, idUsuarioAuditor));
-}
+    public ResponseEntity<TarjetaDTO> crearTarjeta(
+            @RequestBody TarjetaDTO dto,
+            @RequestParam Long idUsuarioAuditor) {
+
+        // La lógica del Service se mantiene
+        return ResponseEntity.ok(tarjetaService.crearTarjeta(dto, idUsuarioAuditor));
+    }
 
     // ==========================================
     // 4. PUT: ASIGNAR TARJETA A EMPLEADO
@@ -63,8 +64,8 @@ public ResponseEntity<TarjetaDTO> crearTarjeta(
     // ==========================================
     @PutMapping("/{idTarjeta}/asignar/{idEmpleado}")
     public ResponseEntity<TarjetaDTO> asignarTarjeta(
-            @PathVariable Long idTarjeta, 
-            @PathVariable Long idEmpleado, 
+            @PathVariable Long idTarjeta,
+            @PathVariable Long idEmpleado,
             @RequestParam Long idAdmin) {
         return ResponseEntity.ok(tarjetaService.asignarTarjeta(idTarjeta, idEmpleado, idAdmin));
     }
@@ -75,7 +76,7 @@ public ResponseEntity<TarjetaDTO> crearTarjeta(
     // ==========================================
     @PutMapping("/{idTarjeta}/revocar")
     public ResponseEntity<TarjetaDTO> revocarTarjeta(
-            @PathVariable Long idTarjeta, 
+            @PathVariable Long idTarjeta,
             @RequestParam Long idAdmin) {
         return ResponseEntity.ok(tarjetaService.revocarTarjeta(idTarjeta, idAdmin));
     }
@@ -101,8 +102,28 @@ public ResponseEntity<TarjetaDTO> crearTarjeta(
             @RequestParam String nuevoEstado,
             @RequestBody Map<String, String> body,
             @RequestParam Long idAdmin) {
-        
+
         String resolucion = body.getOrDefault("resolucion", "");
         return ResponseEntity.ok(tarjetaService.resolverIncidencia(idTarjeta, nuevoEstado, resolucion, idAdmin));
+    }
+
+    // ==========================================
+    // 8. DELETE: ELIMINAR TARJETA DE LA BÓVEDA
+    // ==========================================
+    @DeleteMapping("/eliminar/{idTarjeta}/{idAdmin}")
+    public ResponseEntity<?> eliminarTarjeta(
+            @PathVariable Long idTarjeta,
+            @PathVariable Long idAdmin) {
+
+        try {
+            tarjetaService.eliminarTarjeta(idTarjeta, idAdmin);
+            return ResponseEntity.ok(Map.of("message", "Tarjeta eliminada exitosamente"));
+            
+        } catch (Exception e) {
+            // Si la base de datos explota (ej. por tener viáticos asociados), lo atrapamos y enviamos un 400
+            System.err.println("❌ ERROR AL ELIMINAR EN LA BASE DE DATOS: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(Map.of("message", e.getMessage()));
+        }
     }
 }

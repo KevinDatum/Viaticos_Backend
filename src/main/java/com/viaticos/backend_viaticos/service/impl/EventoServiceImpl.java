@@ -25,6 +25,7 @@ import com.viaticos.backend_viaticos.repository.EventoRepository;
 import com.viaticos.backend_viaticos.repository.LogAuditoriaRepository;
 import com.viaticos.backend_viaticos.repository.PaisRepository;
 import com.viaticos.backend_viaticos.repository.UsuarioRepository;
+import com.viaticos.backend_viaticos.service.AuditoriaService;
 import com.viaticos.backend_viaticos.service.EventoService;
 
 import jakarta.transaction.Transactional;
@@ -52,6 +53,9 @@ public class EventoServiceImpl implements EventoService {
 
     @Autowired
     private CentroCostoRepository centroCostoRepository;
+
+    @Autowired
+    private AuditoriaService auditoriaService;
 
     @Override
     public List<EventoDTO> listarEventosConTotales() {
@@ -383,6 +387,43 @@ public class EventoServiceImpl implements EventoService {
         log.setUsuario(usuarioGerente);
 
         logAuditoriaRepository.save(log);
+    }
+
+    // ==========================================
+    // LÓGICA PARA ELIMINAR EVENTO (SOFT DELETE) + AUDITORÍA
+    // ==========================================
+    @Transactional
+    public void eliminarEvento(Long idEvento, Long idUsuarioAuditor) {
+        // 1. Buscamos el evento
+        Evento evento = eventoRepository.findById(idEvento)
+                .orElseThrow(() -> new RuntimeException("El evento con ID " + idEvento + " no existe."));
+
+        // 2. REGLA DE SEGURIDAD DEL BACKEND
+        if (!"Finalizado".equalsIgnoreCase(evento.getEstado())) {
+            throw new RuntimeException("Solo se pueden eliminar eventos que ya están en estado FINALIZADO.");
+        }
+
+        String nombreEvento = evento.getNombre();
+
+        try {
+            // ✨ LA MAGIA DEL SOFT DELETE:
+            // Cambiamos el estado a ELIMINADO en lugar de hacer un delete() físico.
+            // Esto conserva la integridad referencial en Oracle y evita errores de compilación.
+            evento.setEstado("ELIMINADO");
+            eventoRepository.save(evento);
+
+        } catch (Exception e) {
+            throw new RuntimeException("Error en base de datos al intentar anular el evento: " + e.getMessage());
+        }
+
+        // 3. 🛡️ REGISTRO DE AUDITORÍA
+        auditoriaService.registrarLog(
+                idUsuarioAuditor,
+                "ANULACIÓN (SOFT DELETE)",
+                "EVENTO",
+                idEvento,
+                "Se ocultó el evento finalizado: " + nombreEvento + ". Su historial y gastos se mantienen en BD por auditoría."
+        );
     }
 
 }

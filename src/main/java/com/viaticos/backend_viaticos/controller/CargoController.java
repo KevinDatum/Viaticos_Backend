@@ -21,4 +21,11 @@ public class CargoController {
     public ResponseEntity<List<Cargo>> listarCargos() {
         return ResponseEntity.ok(cargoRepository.findAll());
     }
+
+    @PostMapping
+    public ResponseEntity<Cargo> crearCargo(@RequestBody Cargo cargo) {
+        // Si tienes CargoService, úsalo. Si no, usa el repository directo:
+        Cargo nuevoCargo = cargoRepository.save(cargo); 
+        return ResponseEntity.ok(nuevoCargo);
+    }
 }
