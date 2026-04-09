@@ -36,44 +36,30 @@ public class SecurityConfig {
     @Autowired
     private CustomUserDetailsService userDetailsService;
 
-    // 🔐 Password encoder
     @Bean
     public PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    // 🔐 Authentication Manager (para login)
     @Bean
     public AuthenticationManager authenticationManager(HttpSecurity http) throws Exception {
-
         AuthenticationManagerBuilder authBuilder = http.getSharedObject(AuthenticationManagerBuilder.class);
-
-        authBuilder.userDetailsService(userDetailsService)
-                .passwordEncoder(passwordEncoder());
-
+        authBuilder.userDetailsService(userDetailsService).passwordEncoder(passwordEncoder());
         return authBuilder.build();
     }
 
-    // 🔐 Configuración principal de seguridad
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-
         return http
                 .csrf(csrf -> csrf.disable())
-                //.cors(cors -> cors.configurationSource(corsConfigurationSource()))
-                
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/login/**").permitAll()
                         .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .anyRequest().authenticated())
-
-                // 👇 se ejecuta antes del filtro de login de Spring
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class)
-
                 .build();
     }
 
@@ -83,16 +69,13 @@ public class SecurityConfig {
         CorsConfiguration config = new CorsConfiguration();
         
         config.setAllowCredentials(true);
-        // Tus URLs exactas
-        config.setAllowedOrigins(List.of("http://localhost:5173", "https://qpqm95v9-5173.use2.devtunnels.ms"));
+        config.setAllowedOriginPatterns(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
-        // Forzamos la aceptación explícita de todos los métodos
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"));
         
         source.registerCorsConfiguration("/**", config);
         
         FilterRegistrationBean<CorsFilter> bean = new FilterRegistrationBean<>(new CorsFilter(source));
-        // ✨ LA MAGIA ESTÁ AQUÍ: Se ejecuta ANTES que Spring Security
         bean.setOrder(Ordered.HIGHEST_PRECEDENCE); 
         return bean;
     }

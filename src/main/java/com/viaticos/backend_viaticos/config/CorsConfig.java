@@ -13,9 +13,8 @@ public class CorsConfig {
         return new WebMvcConfigurer() {
             @Override
             public void addCorsMappings(CorsRegistry registry) {
-                // Esto permite que tu React (puerto 5173) hable con Spring (puerto 8080)
                 registry.addMapping("/**") 
-                        .allowedOrigins("http://localhost:5173", "https://qpqm95v9-5173.use2.devtunnels.ms") 
+                        .allowedOriginPatterns("*")
                         .allowedMethods("GET", "POST", "PUT", "DELETE", "PATCH" ,"OPTIONS")
                         .allowedHeaders("*")
                         .allowCredentials(true);
